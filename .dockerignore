@@ -1,0 +1,14 @@
+.git
+.gitignore
+.vinext
+.wrangler
+**/dist
+**/node_modules
+**/__pycache__
+.pytest_cache
+outputs
+work
+.dev-*.log
+.env*
+npm-debug.log*
+README.md

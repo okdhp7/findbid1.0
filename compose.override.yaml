@@ -1,0 +1,46 @@
+services:
+  frontend:
+    build:
+      target: development
+    command: ["/app/frontend/node_modules/.bin/next", "dev", "--webpack", "--hostname", "0.0.0.0", "--port", "3000"]
+    environment:
+      NODE_ENV: development
+      VITE_DEV_HOST: 0.0.0.0
+      VITE_USE_POLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend/app:/app/frontend/app
+      - ./frontend/build:/app/frontend/build
+      - ./frontend/db:/app/frontend/db
+      - ./frontend/lib:/app/frontend/lib
+      - ./frontend/public:/app/frontend/public
+      - ./frontend/worker:/app/frontend/worker
+      - ./frontend/next.config.ts:/app/frontend/next.config.ts:ro
+      - ./frontend/postcss.config.mjs:/app/frontend/postcss.config.mjs:ro
+      - ./frontend/tsconfig.json:/app/frontend/tsconfig.json:ro
+      - ./frontend/vite.config.ts:/app/frontend/vite.config.ts:ro
+      - ./.openai:/app/.openai:ro
+    read_only: false
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"
+
+  backend:
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/backend
+      - --reload-dir
+      - /app/shared/python
+    volumes:
+      - ./backend:/app/backend
+      - ./shared/python:/app/shared/python

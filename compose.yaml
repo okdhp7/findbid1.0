@@ -1,0 +1,212 @@
+name: findbid
+
+services:
+  frontend:
+    image: findbid/frontend:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: findbid-frontend
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${FINDBID_PORT:-3100}:3000"
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+
+  backend:
+    image: findbid/backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: findbid-backend
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8100}:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-findbid}:${POSTGRES_PASSWORD:-findbid}@postgres:5432/${POSTGRES_DB:-findbid}
+      REDIS_URL: redis://redis:6379/0
+      OPENSEARCH_URL: http://opensearch:9200
+      S3_ENDPOINT: http://minio:9000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
+      DEMO_MODE: ${DEMO_MODE:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+      - data
+
+  collector:
+    image: findbid/collector:local
+    build:
+      context: .
+      dockerfile: collector/Dockerfile
+    container_name: findbid-collector
+    init: true
+    restart: unless-stopped
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
+      G2B_SERVICE_KEY: ${G2B_SERVICE_KEY:-}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      COLLECT_INTERVAL_SECONDS: ${COLLECT_INTERVAL_SECONDS:-600}
+    depends_on:
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+
+  document-worker:
+    image: findbid/document-worker:local
+    build:
+      context: .
+      dockerfile: document_worker/Dockerfile
+    container_name: findbid-document-worker
+    init: true
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_INTERNAL_URL: http://backend:8000
+      OPENSEARCH_URL: http://opensearch:9200
+      S3_ENDPOINT: http://minio:9000
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app
+      - data
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: findbid-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-findbid}
+      POSTGRES_USER: ${POSTGRES_USER:-findbid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-findbid}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-findbid} -d ${POSTGRES_DB:-findbid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - data
+
+  redis:
+    image: redis:7-alpine
+    container_name: findbid-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - data
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    container_name: findbid-opensearch
+    profiles: ["full"]
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+      - ./infrastructure/opensearch/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    networks:
+      - data
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: findbid-minio
+    profiles: ["full"]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-findbid}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-findbid-storage}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - data
+
+  test:
+    image: findbid/test:local
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    profiles: ["test"]
+    environment:
+      TEST_BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+
+networks:
+  app:
+  data:
+
+volumes:
+  postgres-data:
+  redis-data:
+  opensearch-data:
+  minio-data:
