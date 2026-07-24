@@ -40,6 +40,26 @@ const budgetOptions = [
   { label: "1,000억원 이하", value: 100_000_000_000 },
 ];
 
+type SearchSnapshot = {
+  category: (typeof categories)[number];
+  region: string;
+  maxBudget: number;
+  includeKeyword: string;
+  excludeKeyword: string;
+  semanticQuery: string;
+  onlyEligible: boolean;
+  closingSoon: boolean;
+};
+
+type SavedSearch = {
+  id: string;
+  name: string;
+  createdAt: string;
+  filters: SearchSnapshot;
+};
+
+const SAVED_SEARCHES_KEY = "findbid.saved-searches.v1";
+
 function Mark({ children }: { children: React.ReactNode }) {
   return (
     <span className="brand-mark" aria-hidden="true">
@@ -114,6 +134,20 @@ export default function Home() {
   const [saved, setSaved] = useState<string[]>([bids[0].id]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [saveSearchOpen, setSaveSearchOpen] = useState(false);
+  const [savedSearchName, setSavedSearchName] = useState("");
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = window.localStorage.getItem(SAVED_SEARCHES_KEY);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored) as SavedSearch[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [saveNotice, setSaveNotice] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("light");
 
   useEffect(() => {
@@ -162,7 +196,18 @@ export default function Home() {
       });
   }, [resultBids, category, region, maxBudget, includeKeyword, excludeKeyword, onlyEligible, closingSoon, sort]);
 
-  const runSearch = async () => {
+  const currentSearchSnapshot = (): SearchSnapshot => ({
+    category,
+    region,
+    maxBudget,
+    includeKeyword,
+    excludeKeyword,
+    semanticQuery,
+    onlyEligible,
+    closingSoon,
+  });
+
+  const runSearch = async (snapshot: SearchSnapshot = currentSearchSnapshot()) => {
     setSearched(false);
     setSearchError("");
     try {
@@ -170,14 +215,14 @@ export default function Home() {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
         body: JSON.stringify({
-          category,
-          region,
-          maxBudget,
-          includeKeywords: includeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
-          excludeKeywords: excludeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
-          onlyEligible,
-          closingWithinDays: closingSoon ? 7 : null,
-          semanticQuery,
+          category: snapshot.category,
+          region: snapshot.region,
+          maxBudget: snapshot.maxBudget,
+          includeKeywords: snapshot.includeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
+          excludeKeywords: snapshot.excludeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
+          onlyEligible: snapshot.onlyEligible,
+          closingWithinDays: snapshot.closingSoon ? 7 : null,
+          semanticQuery: snapshot.semanticQuery,
         }),
       });
       if (!response.ok) {
@@ -191,6 +236,61 @@ export default function Home() {
     } finally {
       setSearched(true);
     }
+  };
+
+  const showSaveNotice = (message: string) => {
+    setSaveNotice(message);
+    window.setTimeout(() => setSaveNotice(""), 2400);
+  };
+
+  const persistSavedSearches = (next: SavedSearch[]) => {
+    setSavedSearches(next);
+    window.localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(next));
+  };
+
+  const openSaveSearch = () => {
+    const keyword = includeKeyword.split(/[,，]/).map((word) => word.trim()).find(Boolean);
+    const location = region === "전체 지역" ? "전국" : region;
+    setSavedSearchName(`${location} ${keyword || category} 검색`);
+    setSaveSearchOpen(true);
+  };
+
+  const saveCurrentSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = savedSearchName.trim();
+    if (!name) return;
+    const next: SavedSearch[] = [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        createdAt: new Date().toISOString(),
+        filters: currentSearchSnapshot(),
+      },
+      ...savedSearches,
+    ].slice(0, 20);
+    persistSavedSearches(next);
+    setSaveSearchOpen(false);
+    showSaveNotice("검색조건을 저장했습니다.");
+  };
+
+  const applySavedSearch = (savedSearch: SavedSearch) => {
+    const snapshot = savedSearch.filters;
+    setCategory(snapshot.category);
+    setRegion(snapshot.region);
+    setMaxBudget(snapshot.maxBudget);
+    setIncludeKeyword(snapshot.includeKeyword);
+    setExcludeKeyword(snapshot.excludeKeyword);
+    setSemanticQuery(snapshot.semanticQuery);
+    setOnlyEligible(snapshot.onlyEligible);
+    setClosingSoon(snapshot.closingSoon);
+    setSaveSearchOpen(false);
+    showSaveNotice(`‘${savedSearch.name}’ 조건을 적용했습니다.`);
+    void runSearch(snapshot);
+  };
+
+  const deleteSavedSearch = (id: string) => {
+    persistSavedSearches(savedSearches.filter((savedSearch) => savedSearch.id !== id));
+    showSaveNotice("저장한 검색조건을 삭제했습니다.");
   };
 
   const toggleSaved = (id: string) => {
@@ -286,7 +386,7 @@ export default function Home() {
                 aria-label="찾고 싶은 입찰사업을 자연어로 입력"
                 placeholder="예: 수도권 공공기관의 AI 기반 웹서비스 구축 사업. Java, React, Python 기술을 활용하고 5억원 이하인 사업을 찾습니다."
               />
-              <button type="button" onClick={runSearch} className="search-button">
+              <button type="button" onClick={() => void runSearch()} className="search-button">
                 <span aria-hidden="true">⌕</span>
                 {searched ? "AI로 검색" : "분석 중…"}
               </button>
@@ -527,7 +627,9 @@ export default function Home() {
               <p>기업 프로필과 선택 조건을 기준으로 관련성이 높은 순서입니다.</p>
             </div>
             <div className="toolbar-actions">
-              <button type="button" className="save-search">＋ 검색조건 저장</button>
+              <button type="button" className="save-search" onClick={openSaveSearch}>
+                ＋ 검색조건 저장
+              </button>
               <select
                 aria-label="정렬 기준"
                 value={sort}
@@ -748,6 +850,96 @@ export default function Home() {
         </div>
       )}
 
+      {/* ── Saved Search Modal ── */}
+      {saveSearchOpen && (
+        <div
+          className="modal-layer"
+          role="presentation"
+          onMouseDown={() => setSaveSearchOpen(false)}
+        >
+          <section
+            className="saved-search-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="saved-search-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close"
+              type="button"
+              onClick={() => setSaveSearchOpen(false)}
+              aria-label="검색조건 저장 창 닫기"
+            >
+              ×
+            </button>
+
+            <span className="section-kicker">SAVED SEARCH</span>
+            <h2 id="saved-search-title">검색조건 저장</h2>
+            <p>현재 조건에 이름을 붙여 저장하고 필요할 때 다시 적용할 수 있습니다.</p>
+
+            <form className="saved-search-form" onSubmit={saveCurrentSearch}>
+              <label htmlFor="saved-search-name">검색조건 이름</label>
+              <input
+                id="saved-search-name"
+                value={savedSearchName}
+                onChange={(event) => setSavedSearchName(event.target.value)}
+                maxLength={50}
+                autoFocus
+                placeholder="예: 수도권 AI 구축사업"
+              />
+              <div className="saved-search-summary" aria-label="현재 검색조건 요약">
+                <span>{category}</span>
+                <span>{region}</span>
+                <span>{budgetOptions.find((option) => option.value === maxBudget)?.label || "금액 전체"}</span>
+                {includeKeyword && <span>포함: {includeKeyword}</span>}
+                {excludeKeyword && <span className="exclude">제외: {excludeKeyword}</span>}
+                {onlyEligible && <span>참가 가능만</span>}
+                {closingSoon && <span>7일 내 마감</span>}
+              </div>
+              <button className="primary-action saved-search-submit" type="submit">
+                현재 조건 저장
+              </button>
+            </form>
+
+            <div className="saved-search-list-head">
+              <h3>저장한 검색조건</h3>
+              <span>{savedSearches.length}개</span>
+            </div>
+            {savedSearches.length === 0 ? (
+              <div className="saved-search-empty">
+                아직 저장한 검색조건이 없습니다.
+              </div>
+            ) : (
+              <div className="saved-search-list">
+                {savedSearches.map((savedSearch) => (
+                  <article className="saved-search-item" key={savedSearch.id}>
+                    <div>
+                      <strong>{savedSearch.name}</strong>
+                      <small>
+                        {savedSearch.filters.category} · {savedSearch.filters.region} · {budgetOptions.find((option) => option.value === savedSearch.filters.maxBudget)?.label || "금액 전체"}
+                      </small>
+                    </div>
+                    <div>
+                      <button type="button" onClick={() => applySavedSearch(savedSearch)}>
+                        적용
+                      </button>
+                      <button
+                        className="delete"
+                        type="button"
+                        onClick={() => deleteSavedSearch(savedSearch.id)}
+                        aria-label={`${savedSearch.name} 삭제`}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* ── Profile Modal ── */}
       {profileOpen && (
         <div
@@ -809,6 +1001,12 @@ export default function Home() {
               기업 정보 관리
             </button>
           </section>
+        </div>
+      )}
+
+      {saveNotice && (
+        <div className="save-notice" role="status" aria-live="polite">
+          ✓ {saveNotice}
         </div>
       )}
 

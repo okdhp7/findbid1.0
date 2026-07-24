@@ -1969,6 +1969,197 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ============================================================
+   SAVED SEARCH MODAL
+   ============================================================ */
+.app-shell .saved-search-modal {
+  animation: modal-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-panel);
+  max-height: calc(100dvh - 40px);
+  max-width: 620px;
+  overflow-y: auto;
+  padding: 32px;
+  position: relative;
+  width: 100%;
+}
+
+.app-shell .saved-search-modal h2 {
+  color: var(--text);
+  font-size: 25px;
+  letter-spacing: -0.5px;
+  margin: 6px 44px 8px 0;
+}
+
+.app-shell .saved-search-modal > p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.app-shell .saved-search-form {
+  border-bottom: 1px solid var(--border);
+  margin-top: 22px;
+  padding-bottom: 24px;
+}
+
+.app-shell .saved-search-form > label {
+  color: var(--text-soft);
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.app-shell .saved-search-form > input {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  height: 46px;
+  outline: none;
+  padding: 0 14px;
+  width: 100%;
+}
+
+.app-shell .saved-search-form > input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.app-shell .saved-search-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.app-shell .saved-search-summary span {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-soft);
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.app-shell .saved-search-summary .exclude {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.app-shell .saved-search-submit {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.app-shell .saved-search-list-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 22px 0 12px;
+}
+
+.app-shell .saved-search-list-head h3 {
+  color: var(--text);
+  font-size: 15px;
+  margin: 0;
+}
+
+.app-shell .saved-search-list-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-shell .saved-search-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-shell .saved-search-item {
+  align-items: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 13px 14px;
+}
+
+.app-shell .saved-search-item > div:first-child {
+  min-width: 0;
+}
+
+.app-shell .saved-search-item strong,
+.app-shell .saved-search-item small {
+  display: block;
+}
+
+.app-shell .saved-search-item strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.app-shell .saved-search-item small {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .saved-search-item > div:last-child {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.app-shell .saved-search-item button {
+  background: var(--panel-solid);
+  border: 1px solid var(--border-mid);
+  border-radius: 7px;
+  color: var(--accent-light);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+
+.app-shell .saved-search-item button.delete {
+  color: var(--red);
+}
+
+.app-shell .saved-search-empty {
+  border: 1px dashed var(--border-mid);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 24px;
+  text-align: center;
+}
+
+.app-shell .save-notice {
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  bottom: 24px;
+  box-shadow: var(--shadow-panel);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  left: 50%;
+  max-width: calc(100% - 32px);
+  padding: 12px 18px;
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 140;
+}
+
+/* ============================================================
    MOBILE DOCK
    ============================================================ */
 .mobile-dock {
@@ -2471,6 +2662,27 @@ a { color: inherit; text-decoration: none; }
     max-height: calc(100vh - 24px);
     overflow-y: auto;
     padding: 24px;
+  }
+
+  .app-shell .saved-search-modal {
+    border-radius: var(--radius-xl);
+    margin: 12px;
+    max-height: calc(100dvh - 24px);
+    padding: 22px;
+  }
+
+  .app-shell .saved-search-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-shell .saved-search-item > div:last-child,
+  .app-shell .saved-search-item button {
+    width: 100%;
+  }
+
+  .app-shell .save-notice {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
   }
 }
 
