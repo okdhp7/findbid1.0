@@ -18,9 +18,25 @@ settings = get_settings()
 engine = create_engine(settings.database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
+bid_engine = (
+    create_engine(
+        settings.bid_database_url,
+        pool_pre_ping=True,
+        connect_args={"options": "-c default_transaction_read_only=on"},
+    )
+    if settings.bid_database_url
+    else engine
+)
+BidSessionLocal = sessionmaker(bind=bid_engine, autoflush=False, expire_on_commit=False)
+
 
 def get_session() -> Generator[Session, None, None]:
     with SessionLocal() as session:
+        yield session
+
+
+def get_bid_session() -> Generator[Session, None, None]:
+    with BidSessionLocal() as session:
         yield session
 
 

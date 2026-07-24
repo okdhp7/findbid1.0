@@ -15,6 +15,10 @@ export type Bid = {
   closeAt: string;
   daysLeft: number;
   score: number;
+  scoreConfidence?: number;
+  scoreBreakdown?: Record<string, number>;
+  scoreReasons?: string[];
+  unresolvedRequirements?: string[];
   eligibility: Eligibility;
   summary: string;
   matched: string[];

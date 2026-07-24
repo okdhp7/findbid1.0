@@ -6,6 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "postgresql+psycopg://findbid:findbid@postgres:5432/findbid"
+    bid_database_url: str = ""
+    bid_database_schema: str = "public"
+    bid_database_table: str = "bids"
     redis_url: str = "redis://redis:6379/0"
     opensearch_url: str = "http://opensearch:9200"
     s3_endpoint: str = "http://minio:9000"

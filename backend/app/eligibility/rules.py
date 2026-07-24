@@ -7,6 +7,8 @@ COMPANY_PROFILE = {
     "size": "중소기업",
     "licenses": ["소프트웨어사업자", "정보통신공사업"],
     "technologies": ["생성형 AI", "Java", "React", "Python", "데이터 플랫폼"],
+    "experiences": [],
+    "preferred_max_budget": None,
     "completion": 86,
 }
 

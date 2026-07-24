@@ -19,4 +19,12 @@ def test_health_and_search() -> None:
         timeout=5,
     )
     assert search.status_code == 200
-    assert search.json()["total"] >= 1
+    result = search.json()
+    assert result["total"] >= 1
+    assert result["eligibleTotal"] >= 0
+    assert result["closingSoonTotal"] >= 0
+    assert 0 <= result["averageScore"] <= 100
+    assert 0 <= result["items"][0]["score"] <= 100
+    assert 0 <= result["items"][0]["scoreConfidence"] <= 100
+    assert result["items"][0]["scoreBreakdown"]
+    assert result["items"][0]["scoreReasons"]

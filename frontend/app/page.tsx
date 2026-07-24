@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { bids, companyProfile, type Bid } from "../lib/bids";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { companyProfile, type Bid } from "../lib/bids";
 
 const categories = ["전체", "용역", "물품", "공사"] as const;
 const regions = [
   "전체 지역",
-  "전국",
   "서울",
   "부산",
   "대구",
@@ -51,6 +50,19 @@ type SearchSnapshot = {
   closingSoon: boolean;
 };
 
+const DEFAULT_SEARCH: SearchSnapshot = {
+  category: "전체",
+  region: "전체 지역",
+  maxBudget: 500_000_000,
+  includeKeyword: "",
+  excludeKeyword: "",
+  semanticQuery: "",
+  onlyEligible: false,
+  closingSoon: false,
+};
+
+const PAGE_SIZE = 20;
+
 type SavedSearch = {
   id: string;
   name: string;
@@ -59,6 +71,10 @@ type SavedSearch = {
 };
 
 const SAVED_SEARCHES_KEY = "findbid.saved-searches.v1";
+
+function normalizeRegionFilter(region: string) {
+  return region === "전국" ? "전체 지역" : region;
+}
 
 function Mark({ children }: { children: React.ReactNode }) {
   return (
@@ -118,20 +134,31 @@ function Toggle({
 }
 
 export default function Home() {
-  const [category, setCategory] = useState<(typeof categories)[number]>("전체");
-  const [region, setRegion] = useState("전체 지역");
-  const [maxBudget, setMaxBudget] = useState(500000000);
-  const [includeKeyword, setIncludeKeyword] = useState("AI, 시스템 구축");
-  const [excludeKeyword, setExcludeKeyword] = useState("장비 납품, 상주 인력파견");
-  const [semanticQuery, setSemanticQuery] = useState("");
-  const [onlyEligible, setOnlyEligible] = useState(false);
-  const [closingSoon, setClosingSoon] = useState(false);
+  const resultTopRef = useRef<HTMLDivElement>(null);
+  const resultBottomRef = useRef<HTMLDivElement>(null);
+  const autoSearchTimerRef = useRef<number | null>(null);
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+  const searchRequestIdRef = useRef(0);
+  const [category, setCategory] = useState<(typeof categories)[number]>(DEFAULT_SEARCH.category);
+  const [region, setRegion] = useState(DEFAULT_SEARCH.region);
+  const [maxBudget, setMaxBudget] = useState(DEFAULT_SEARCH.maxBudget);
+  const [includeKeyword, setIncludeKeyword] = useState(DEFAULT_SEARCH.includeKeyword);
+  const [excludeKeyword, setExcludeKeyword] = useState(DEFAULT_SEARCH.excludeKeyword);
+  const [semanticQuery, setSemanticQuery] = useState(DEFAULT_SEARCH.semanticQuery);
+  const [onlyEligible, setOnlyEligible] = useState(DEFAULT_SEARCH.onlyEligible);
+  const [closingSoon, setClosingSoon] = useState(DEFAULT_SEARCH.closingSoon);
   const [sort, setSort] = useState("score");
-  const [searched, setSearched] = useState(true);
-  const [resultBids, setResultBids] = useState<Bid[]>(bids);
+  const [searched, setSearched] = useState(false);
+  const [resultBids, setResultBids] = useState<Bid[]>([]);
+  const [databaseTotal, setDatabaseTotal] = useState(0);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [eligibleTotal, setEligibleTotal] = useState(0);
+  const [closingSoonTotal, setClosingSoonTotal] = useState(0);
+  const [averageScore, setAverageScore] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<Bid | null>(null);
-  const [saved, setSaved] = useState<string[]>([bids[0].id]);
+  const [saved, setSaved] = useState<string[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [saveSearchOpen, setSaveSearchOpen] = useState(false);
@@ -142,7 +169,15 @@ export default function Home() {
       const stored = window.localStorage.getItem(SAVED_SEARCHES_KEY);
       if (!stored) return [];
       const parsed = JSON.parse(stored) as SavedSearch[];
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed)
+        ? parsed.map((savedSearch) => ({
+            ...savedSearch,
+            filters: {
+              ...savedSearch.filters,
+              region: normalizeRegionFilter(savedSearch.filters.region),
+            },
+          }))
+        : [];
     } catch {
       return [];
     }
@@ -196,6 +231,17 @@ export default function Home() {
       });
   }, [resultBids, category, region, maxBudget, includeKeyword, excludeKeyword, onlyEligible, closingSoon, sort]);
 
+  const totalPages = Math.ceil(searchTotal / PAGE_SIZE);
+  const pageWindowStart = Math.max(
+    1,
+    Math.min(currentPage - 2, Math.max(1, totalPages - 4)),
+  );
+  const pageWindowEnd = Math.min(totalPages, pageWindowStart + 4);
+  const pageNumbers = Array.from(
+    { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
+    (_, index) => pageWindowStart + index,
+  );
+
   const currentSearchSnapshot = (): SearchSnapshot => ({
     category,
     region,
@@ -207,13 +253,20 @@ export default function Home() {
     closingSoon,
   });
 
-  const runSearch = async (snapshot: SearchSnapshot = currentSearchSnapshot()) => {
+  const runSearch = useCallback(async (snapshot: SearchSnapshot, page = 1) => {
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    searchAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortControllerRef.current = controller;
     setSearched(false);
     setSearchError("");
+    setCurrentPage(page);
     try {
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
+        signal: controller.signal,
         body: JSON.stringify({
           category: snapshot.category,
           region: snapshot.region,
@@ -223,20 +276,96 @@ export default function Home() {
           onlyEligible: snapshot.onlyEligible,
           closingWithinDays: snapshot.closingSoon ? 7 : null,
           semanticQuery: snapshot.semanticQuery,
+          page,
+          limit: PAGE_SIZE,
         }),
       });
       if (!response.ok) {
         throw new Error("검색 서비스 응답 오류");
       }
-      const data = (await response.json()) as { items: Bid[] };
+      const data = (await response.json()) as {
+        databaseTotal: number;
+        total: number;
+        eligibleTotal: number;
+        closingSoonTotal: number;
+        averageScore: number;
+        items: Bid[];
+      };
+      if (
+        !Array.isArray(data.items)
+        || typeof data.databaseTotal !== "number"
+        || typeof data.total !== "number"
+        || typeof data.eligibleTotal !== "number"
+        || typeof data.closingSoonTotal !== "number"
+        || typeof data.averageScore !== "number"
+      ) {
+        throw new Error("검색 결과 형식 오류");
+      }
+      if (requestId !== searchRequestIdRef.current) return;
       setResultBids(data.items);
-    } catch {
-      setSearchError("검색 백엔드에 연결할 수 없어 화면의 데모 데이터를 표시합니다.");
-      setResultBids(bids);
+      setDatabaseTotal(data.databaseTotal);
+      setSearchTotal(data.total);
+      setEligibleTotal(data.eligibleTotal);
+      setClosingSoonTotal(data.closingSoonTotal);
+      setAverageScore(data.averageScore);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      if (requestId !== searchRequestIdRef.current) return;
+      setSearchError("검색 서비스에 연결할 수 없습니다. 잠시 후 다시 검색해 주세요.");
+      setResultBids([]);
+      setDatabaseTotal(0);
+      setSearchTotal(0);
+      setEligibleTotal(0);
+      setClosingSoonTotal(0);
+      setAverageScore(0);
     } finally {
-      setSearched(true);
+      if (requestId === searchRequestIdRef.current) {
+        setSearched(true);
+      }
     }
+  }, []);
+
+  const cancelScheduledSearch = () => {
+    if (autoSearchTimerRef.current === null) return;
+    window.clearTimeout(autoSearchTimerRef.current);
+    autoSearchTimerRef.current = null;
   };
+
+  const runSearchNow = (snapshot: SearchSnapshot, page = 1) => {
+    cancelScheduledSearch();
+    void runSearch(snapshot, page);
+  };
+
+  const scheduleDetailSearch = (snapshot: SearchSnapshot, delay: number) => {
+    cancelScheduledSearch();
+    autoSearchTimerRef.current = window.setTimeout(() => {
+      autoSearchTimerRef.current = null;
+      void runSearch(snapshot, 1);
+    }, delay);
+  };
+
+  const scrollToResultBoundary = (boundary: "top" | "bottom") => {
+    const target = boundary === "top" ? resultTopRef.current : resultBottomRef.current;
+    if (!target) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: boundary === "top" ? "start" : "end",
+    });
+  };
+
+  useEffect(() => {
+    const initialSearch = window.setTimeout(() => {
+      void runSearch(DEFAULT_SEARCH);
+    }, 0);
+    return () => {
+      window.clearTimeout(initialSearch);
+      if (autoSearchTimerRef.current !== null) {
+        window.clearTimeout(autoSearchTimerRef.current);
+      }
+      searchAbortControllerRef.current?.abort();
+    };
+  }, [runSearch]);
 
   const showSaveNotice = (message: string) => {
     setSaveNotice(message);
@@ -250,7 +379,7 @@ export default function Home() {
 
   const openSaveSearch = () => {
     const keyword = includeKeyword.split(/[,，]/).map((word) => word.trim()).find(Boolean);
-    const location = region === "전체 지역" ? "전국" : region;
+    const location = region === "전체 지역" ? "전체 지역" : region;
     setSavedSearchName(`${location} ${keyword || category} 검색`);
     setSaveSearchOpen(true);
   };
@@ -274,7 +403,10 @@ export default function Home() {
   };
 
   const applySavedSearch = (savedSearch: SavedSearch) => {
-    const snapshot = savedSearch.filters;
+    const snapshot = {
+      ...savedSearch.filters,
+      region: normalizeRegionFilter(savedSearch.filters.region),
+    };
     setCategory(snapshot.category);
     setRegion(snapshot.region);
     setMaxBudget(snapshot.maxBudget);
@@ -285,7 +417,7 @@ export default function Home() {
     setClosingSoon(snapshot.closingSoon);
     setSaveSearchOpen(false);
     showSaveNotice(`‘${savedSearch.name}’ 조건을 적용했습니다.`);
-    void runSearch(snapshot);
+    runSearchNow(snapshot);
   };
 
   const deleteSavedSearch = (id: string) => {
@@ -386,7 +518,7 @@ export default function Home() {
                 aria-label="찾고 싶은 입찰사업을 자연어로 입력"
                 placeholder="예: 수도권 공공기관의 AI 기반 웹서비스 구축 사업. Java, React, Python 기술을 활용하고 5억원 이하인 사업을 찾습니다."
               />
-              <button type="button" onClick={() => void runSearch()} className="search-button">
+              <button type="button" onClick={() => runSearchNow(currentSearchSnapshot())} className="search-button">
                 <span aria-hidden="true">⌕</span>
                 {searched ? "AI로 검색" : "분석 중…"}
               </button>
@@ -445,7 +577,13 @@ export default function Home() {
                   key={item}
                   type="button"
                   className={category === item ? "active" : ""}
-                  onClick={() => setCategory(item)}
+                  onClick={() => {
+                    setCategory(item);
+                    scheduleDetailSearch(
+                      { ...currentSearchSnapshot(), category: item },
+                      0,
+                    );
+                  }}
                 >
                   {item}
                 </button>
@@ -460,7 +598,14 @@ export default function Home() {
               <select
                 id="region"
                 value={region}
-                onChange={(event) => setRegion(event.target.value)}
+                onChange={(event) => {
+                  const nextRegion = event.target.value;
+                  setRegion(nextRegion);
+                  scheduleDetailSearch(
+                    { ...currentSearchSnapshot(), region: nextRegion },
+                    0,
+                  );
+                }}
               >
                 {regions.map((item) => <option key={item}>{item}</option>)}
               </select>
@@ -470,7 +615,14 @@ export default function Home() {
               <select
                 id="budget"
                 value={maxBudget}
-                onChange={(event) => setMaxBudget(Number(event.target.value))}
+                onChange={(event) => {
+                  const nextBudget = Number(event.target.value);
+                  setMaxBudget(nextBudget);
+                  scheduleDetailSearch(
+                    { ...currentSearchSnapshot(), maxBudget: nextBudget },
+                    0,
+                  );
+                }}
               >
                 {budgetOptions.map((item) => (
                   <option key={item.label} value={item.value}>{item.label}</option>
@@ -487,7 +639,14 @@ export default function Home() {
               <input
                 id="include"
                 value={includeKeyword}
-                onChange={(event) => setIncludeKeyword(event.target.value)}
+                onChange={(event) => {
+                  const nextKeyword = event.target.value;
+                  setIncludeKeyword(nextKeyword);
+                  scheduleDetailSearch(
+                    { ...currentSearchSnapshot(), includeKeyword: nextKeyword },
+                    500,
+                  );
+                }}
                 placeholder="AI, 웹서비스, 플랫폼"
               />
             </div>
@@ -502,7 +661,14 @@ export default function Home() {
               <input
                 id="exclude"
                 value={excludeKeyword}
-                onChange={(event) => setExcludeKeyword(event.target.value)}
+                onChange={(event) => {
+                  const nextKeyword = event.target.value;
+                  setExcludeKeyword(nextKeyword);
+                  scheduleDetailSearch(
+                    { ...currentSearchSnapshot(), excludeKeyword: nextKeyword },
+                    500,
+                  );
+                }}
                 placeholder="장비 납품, 인력파견"
               />
             </div>
@@ -512,12 +678,26 @@ export default function Home() {
           <div className="filter-group toggle-group">
             <Toggle
               checked={onlyEligible}
-              onChange={() => setOnlyEligible((value) => !value)}
+              onChange={() => {
+                const nextOnlyEligible = !onlyEligible;
+                setOnlyEligible(nextOnlyEligible);
+                scheduleDetailSearch(
+                  { ...currentSearchSnapshot(), onlyEligible: nextOnlyEligible },
+                  0,
+                );
+              }}
               label="참가 가능 공고만"
             />
             <Toggle
               checked={closingSoon}
-              onChange={() => setClosingSoon((value) => !value)}
+              onChange={() => {
+                const nextClosingSoon = !closingSoon;
+                setClosingSoon(nextClosingSoon);
+                scheduleDetailSearch(
+                  { ...currentSearchSnapshot(), closingSoon: nextClosingSoon },
+                  0,
+                );
+              }}
               label="7일 이내 마감"
             />
           </div>
@@ -526,7 +706,7 @@ export default function Home() {
           <button
             className="apply-button"
             type="button"
-            onClick={() => { runSearch(); setFiltersOpen(false); }}
+            onClick={() => { runSearchNow(currentSearchSnapshot()); setFiltersOpen(false); }}
           >
             조건 적용하기
           </button>
@@ -534,6 +714,16 @@ export default function Home() {
             className="reset-button"
             type="button"
             onClick={() => {
+              const resetSnapshot = {
+                ...currentSearchSnapshot(),
+                category: "전체" as const,
+                region: "전체 지역",
+                maxBudget: 0,
+                includeKeyword: "",
+                excludeKeyword: "",
+                onlyEligible: false,
+                closingSoon: false,
+              };
               setCategory("전체");
               setRegion("전체 지역");
               setMaxBudget(0);
@@ -541,6 +731,7 @@ export default function Home() {
               setExcludeKeyword("");
               setOnlyEligible(false);
               setClosingSoon(false);
+              runSearchNow(resetSnapshot);
             }}
           >
             조건 초기화
@@ -576,39 +767,39 @@ export default function Home() {
             <article>
               <span className="metric-icon mint">⌕</span>
               <div>
-                <small>검색된 공고</small>
-                <strong>1,284<em>건</em></strong>
+                <small>전체 공고</small>
+                <strong>{databaseTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">+42 오늘</span>
+              <span className="trend">DB 검색 결과</span>
             </article>
             <article>
               <span className="metric-icon blue">✓</span>
               <div>
                 <small>참가 가능</small>
-                <strong>38<em>건</em></strong>
+                <strong>{eligibleTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">상위 3%</span>
+              <span className="trend">조건 기준</span>
             </article>
             <article>
               <span className="metric-icon gold">✦</span>
               <div>
                 <small>평균 적합도</small>
-                <strong>87<em>점</em></strong>
+                <strong>{averageScore.toLocaleString("ko-KR")}<em>점</em></strong>
               </div>
-              <span className="trend">매우 높음</span>
+              <span className="trend">조건 기준</span>
             </article>
             <article>
               <span className="metric-icon rose">◷</span>
               <div>
                 <small>7일 내 마감</small>
-                <strong>12<em>건</em></strong>
+                <strong>{closingSoonTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend warning">확인 필요</span>
+              <span className="trend warning">조건 기준</span>
             </article>
           </div>
 
           {/* Toolbar */}
-          <div className="result-toolbar">
+          <div className="result-toolbar" ref={resultTopRef}>
             <div>
               <button
                 className="mobile-filter"
@@ -622,7 +813,9 @@ export default function Home() {
               <span className="section-kicker">RECOMMENDED BIDS</span>
               <h2>
                 AI 추천 입찰공고
-                <span>{filteredBids.length}</span>
+                <span className="recommendation-count">
+                  {searchTotal.toLocaleString("ko-KR")}<em>건</em>
+                </span>
               </h2>
               <p>기업 프로필과 선택 조건을 기준으로 관련성이 높은 순서입니다.</p>
             </div>
@@ -644,7 +837,13 @@ export default function Home() {
 
           {/* Bid List */}
           <div className={`result-list ${searched ? "" : "is-loading"}`}>
-            {filteredBids.length === 0 ? (
+            {!searched ? (
+              <div className="empty-state" role="status">
+                <span>⌕</span>
+                <h3>실제 입찰공고를 불러오는 중입니다</h3>
+                <p>검색조건에 맞는 공고를 데이터베이스에서 조회하고 있습니다.</p>
+              </div>
+            ) : filteredBids.length === 0 ? (
               <div className="empty-state">
                 <span>⌕</span>
                 <h3>조건에 맞는 공고가 없습니다</h3>
@@ -657,11 +856,20 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              filteredBids.map((bid) => (
+              filteredBids.map((bid, index) => (
                 <article className="bid-card" key={bid.id}>
+                  <span
+                    className="bid-sequence"
+                    aria-label={`검색결과 ${(currentPage - 1) * PAGE_SIZE + index + 1}번`}
+                  >
+                    {(currentPage - 1) * PAGE_SIZE + index + 1}
+                  </span>
                   <div className="bid-score">
                     <ScoreRing score={bid.score} />
                     <StatusBadge value={bid.eligibility} />
+                    <span className="score-confidence">
+                      신뢰도 {bid.scoreConfidence ?? 0}%
+                    </span>
                   </div>
                   <div className="bid-content">
                     <div className="bid-meta-top">
@@ -726,9 +934,86 @@ export default function Home() {
             )}
           </div>
 
+          {searched && totalPages > 1 && (
+            <nav className="pagination" aria-label="검색결과 페이지">
+              <button
+                type="button"
+                className="pagination-direction"
+                disabled={currentPage === 1}
+                onClick={() => runSearchNow(currentSearchSnapshot(), currentPage - 1)}
+              >
+                이전
+              </button>
+              {pageWindowStart > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => runSearchNow(currentSearchSnapshot(), 1)}
+                  >
+                    1
+                  </button>
+                  {pageWindowStart > 2 && <span aria-hidden="true">…</span>}
+                </>
+              )}
+              {pageNumbers.map((page) => (
+                <button
+                  type="button"
+                  key={page}
+                  className={page === currentPage ? "active" : ""}
+                  aria-current={page === currentPage ? "page" : undefined}
+                  onClick={() => runSearchNow(currentSearchSnapshot(), page)}
+                >
+                  {page}
+                </button>
+              ))}
+              {pageWindowEnd < totalPages && (
+                <>
+                  {pageWindowEnd < totalPages - 1 && <span aria-hidden="true">…</span>}
+                  <button
+                    type="button"
+                    onClick={() => runSearchNow(currentSearchSnapshot(), totalPages)}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="pagination-direction"
+                disabled={currentPage === totalPages}
+                onClick={() => runSearchNow(currentSearchSnapshot(), currentPage + 1)}
+              >
+                다음
+              </button>
+            </nav>
+          )}
+
+          <div className="result-list-end" ref={resultBottomRef} aria-hidden="true" />
+
+          {searched && filteredBids.length > 0 && (
+            <div className="result-scroll-controls" aria-label="공고 목록 빠른 이동">
+              <button
+                type="button"
+                onClick={() => scrollToResultBoundary("top")}
+                aria-label="공고 목록 상단으로 이동"
+                title="공고 목록 상단으로 이동"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToResultBoundary("bottom")}
+                aria-label="공고 목록 하단으로 이동"
+                title="공고 목록 하단으로 이동"
+              >
+                ↓
+              </button>
+            </div>
+          )}
+
           <div className="source-note">
             <span>ⓘ</span>
-            {searchError || "FastAPI 검색 서비스와 연결되어 있습니다. 나라장터 인증키를 설정하면 실제 공고 수집 모드로 전환됩니다."}
+            {searchError || "외부 입찰공고 데이터베이스의 실시간 검색결과입니다."}
           </div>
         </div>
       </section>
@@ -767,6 +1052,9 @@ export default function Home() {
                 <StatusBadge value={selected.eligibility} />
                 <h2>{selected.title}</h2>
                 <p>{selected.agency} · {selected.demandAgency}</p>
+                <span className="score-confidence">
+                  점수 신뢰도 {selected.scoreConfidence ?? 0}%
+                </span>
               </div>
             </div>
 
@@ -776,7 +1064,9 @@ export default function Home() {
                 <strong>AI 핵심 분석</strong>
               </div>
               <p>{selected.summary}</p>
-              <p>귀사의 보유 기술과 유사성이 높으며, 필수 자격 중 확인되지 않은 증빙자료는 제출 전 검토가 필요합니다.</p>
+              {(selected.scoreReasons ?? []).map((reason) => (
+                <p key={reason}>{reason}</p>
+              ))}
             </div>
 
             <div className="drawer-grid">
@@ -798,15 +1088,32 @@ export default function Home() {
               </div>
             </div>
 
+            <section className="analysis-section score-analysis">
+              <h3>
+                <span className="dot good" />
+                적합도 산정 근거
+              </h3>
+              <div className="score-breakdown">
+                {Object.entries(selected.scoreBreakdown ?? {}).map(([name, value]) => (
+                  <div key={name}>
+                    <span>{name}</span>
+                    <strong>{value}점</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <section className="analysis-section">
               <h3>
                 <span className="dot good" />
                 일치하는 기업 역량
               </h3>
               <ul>
-                {selected.matched.map((item) => (
-                  <li key={item}>✓ {item}</li>
-                ))}
+                {selected.matched.length > 0
+                  ? selected.matched.map((item) => (
+                      <li key={item}>✓ {item}</li>
+                    ))
+                  : <li>일치 항목을 추가로 확인해 주세요.</li>}
               </ul>
             </section>
 
@@ -828,9 +1135,11 @@ export default function Home() {
                 확인할 사항
               </h3>
               <ul className="risk-list">
-                {selected.risks.map((item) => (
-                  <li key={item}>! {item}</li>
-                ))}
+                {selected.risks.length > 0
+                  ? selected.risks.map((item) => (
+                      <li key={item}>! {item}</li>
+                    ))
+                  : <li>현재 확인된 추가 위험사항이 없습니다.</li>}
               </ul>
             </section>
 

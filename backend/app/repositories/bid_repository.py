@@ -40,7 +40,7 @@ class BidRepository:
         self.session.commit()
         return len(records)
 
-    def search(self, request: SearchRequest) -> list[BidRecord]:
+    def _matching_records(self, request: SearchRequest) -> list[BidRecord]:
         statement = select(BidNotice)
         if request.category and request.category != "전체":
             statement = statement.where(BidNotice.category == request.category)
@@ -71,4 +71,12 @@ class BidRepository:
                 continue
             results.append(record)
 
-        return sorted(results, key=lambda item: item.score, reverse=True)[: request.limit]
+        return sorted(results, key=lambda item: item.score, reverse=True)
+
+    def search(self, request: SearchRequest) -> list[BidRecord]:
+        sorted_results = self._matching_records(request)
+        start = (request.page - 1) * request.limit
+        return sorted_results[start : start + request.limit]
+
+    def count_search(self, request: SearchRequest) -> int:
+        return len(self._matching_records(request))

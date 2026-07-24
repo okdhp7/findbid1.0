@@ -31,6 +31,10 @@ class BidRecord(CamelModel):
     close_at: str
     days_left: int = 0
     score: int = Field(default=70, ge=0, le=100)
+    score_confidence: int = Field(default=0, ge=0, le=100)
+    score_breakdown: dict[str, int] = Field(default_factory=dict)
+    score_reasons: list[str] = Field(default_factory=list)
+    unresolved_requirements: list[str] = Field(default_factory=list)
     eligibility: str = "확인 필요"
     summary: str = ""
     matched: list[str] = Field(default_factory=list)
@@ -51,7 +55,8 @@ class SearchRequest(CamelModel):
     only_eligible: bool = False
     closing_within_days: int | None = None
     semantic_query: str = ""
-    limit: int = Field(default=50, ge=1, le=200)
+    page: int = Field(default=1, ge=1)
+    limit: int = Field(default=20, ge=1, le=200)
 
 
 class QueryPlan(CamelModel):
@@ -62,5 +67,9 @@ class QueryPlan(CamelModel):
 
 class SearchResponse(CamelModel):
     query_plan: QueryPlan
+    database_total: int
     total: int
+    eligible_total: int
+    closing_soon_total: int
+    average_score: int
     items: list[BidRecord]

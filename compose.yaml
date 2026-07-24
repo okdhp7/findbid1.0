@@ -43,6 +43,9 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-findbid}:${POSTGRES_PASSWORD:-findbid}@postgres:5432/${POSTGRES_DB:-findbid}
+      BID_DATABASE_URL: ${BID_DATABASE_URL:-}
+      BID_DATABASE_SCHEMA: ${BID_DATABASE_SCHEMA:-public}
+      BID_DATABASE_TABLE: ${BID_DATABASE_TABLE:-bids}
       REDIS_URL: redis://redis:6379/0
       OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
