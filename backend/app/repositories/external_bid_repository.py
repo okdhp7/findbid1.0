@@ -58,6 +58,7 @@ class ExternalBidRepository:
 
     def __init__(self, session: Session):
         self.session = session
+        self.last_search_trace: list[str] = []
         settings = get_settings()
         if not SAFE_IDENTIFIER.fullmatch(settings.bid_database_schema):
             raise ValueError("입찰공고 DB 스키마 이름이 올바르지 않습니다.")
@@ -553,6 +554,7 @@ class ExternalBidRepository:
         return conditions, params, order_by
 
     def _ranked_records(self, request: SearchRequest) -> list[BidRecord]:
+        self.last_search_trace = []
         conditions, params, order_by = self._search_parts(request)
         semantic_enabled = (
             bool(request.semantic_query.strip())
@@ -577,17 +579,28 @@ class ExternalBidRepository:
             dict(row)
             for row in self.session.execute(statement, params).mappings().all()
         ]
+        self.last_search_trace.append(
+            f"DB 조건 적용 후보: {len(rows):,}건"
+        )
         semantic_scores = self._semantic_scores(rows, request.semantic_query)
         if semantic_enabled:
+            self.last_search_trace.append(
+                f"임베딩 유사도 통과: {len(semantic_scores):,}건"
+            )
             rows = [
                 row
                 for row in rows
                 if str(row["bid_number"]) in semantic_scores
             ]
+            semantic_count = len(rows)
             rows = self._prioritize_semantic_rows(
                 rows,
                 parse_semantic_intent(request.semantic_query),
                 semantic_scores,
+            )
+            self.last_search_trace.append(
+                "지식사전·핵심어 재정렬: "
+                f"{semantic_count:,}건 → {len(rows):,}건"
             )
         records = [
             self._to_record(

@@ -121,6 +121,21 @@ test("AI 시맨틱 검색 입력창에서 Enter 키로 검색한다", async () =
   assert.match(searchLabelStyle, /line-height:\s*1/);
 });
 
+test("검색 과정과 처리시간을 펼쳐서 확인할 수 있다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /searchTrace\?: string\[\]/);
+  assert.match(page, /setSearchTrace\(data\.queryPlan\?\.searchTrace \?\? \[\]\)/);
+  assert.match(page, />검색 과정 보기<\/span>/);
+  assert.match(page, /className="search-trace-panel"/);
+  assert.match(page, /searchElapsedMs\.toLocaleString\("ko-KR"\)/);
+  assert.match(css, /\.app-shell \.search-trace-toggle/);
+  assert.match(css, /\.app-shell \.search-trace-panel/);
+});
+
 test("공고 제목 상세정보와 AI 상세 분석을 서로 다른 창으로 제공한다", async () => {
   const [page, css, bidsSource] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),

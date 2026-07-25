@@ -1,6 +1,12 @@
+import json
+import logging
+from time import perf_counter
+from uuid import uuid4
+
 from sqlalchemy.orm import Session
 
 from app.agent.orchestrator import describe_search_intent
+from app.knowledge import analyze_query
 from app.repositories import BidRepository, ExternalBidRepository
 from app.search_cache import (
     get_cached_semantic_search,
@@ -15,6 +21,8 @@ from findbid_shared.schemas.bid import (
     SearchResponse,
 )
 
+logger = logging.getLogger("uvicorn.error")
+
 
 class SearchService:
     def __init__(self, session: Session):
@@ -25,6 +33,50 @@ class SearchService:
         )
 
     def search(self, request: SearchRequest) -> SearchResponse:
+        started_at = perf_counter()
+        search_id = uuid4().hex[:12]
+        analysis = analyze_query(request.semantic_query)
+        trace: list[str] = [
+            f"검색 시작: {request.semantic_query or '상세조건 검색'}",
+            f"문장 정규화: {analysis.normalized_query or '없음'}",
+        ]
+        entity_labels = list(
+            dict.fromkeys(
+                f"{entity.domain}={entity.canonical}"
+                for entity in analysis.entities
+                if entity.domain not in {
+                    "검색 명령 표현",
+                    "제외 의도",
+                }
+            )
+        )
+        trace.append(
+            "개체 추출: "
+            + (", ".join(entity_labels) if entity_labels else "없음")
+        )
+        region_entities = [
+            entity
+            for entity in analysis.entities
+            if entity.domain == "지역"
+        ]
+        if region_entities:
+            trace.append(
+                "지역 지식 그래프: "
+                + ", ".join(
+                    f"{entity.canonical} → {'·'.join(entity.values)}"
+                    for entity in region_entities
+                )
+            )
+            trace.append(
+                "지역 적용 방식: "
+                + (
+                    "참가 지역 필터"
+                    if analysis.participant_regions
+                    else "발주기관·수요기관 우선순위"
+                )
+            )
+
+        cache_hit = False
         if isinstance(self.repository, ExternalBidRepository):
             cached = get_cached_semantic_search(request)
             if cached:
@@ -38,6 +90,7 @@ class SearchService:
                     eligible_total = int(cached["eligibleTotal"])
                     closing_soon_total = int(cached["closingSoonTotal"])
                     average_score = int(cached["averageScore"])
+                    cache_hit = True
                 except (KeyError, TypeError, ValueError):
                     cached = None
 
@@ -64,6 +117,9 @@ class SearchService:
                         "averageScore": average_score,
                     },
                 )
+                trace.extend(self.repository.last_search_trace)
+            else:
+                trace.append("검색 결과 캐시: 적중")
 
             start = (request.page - 1) * request.limit
             items = records[start : start + request.limit]
@@ -90,6 +146,29 @@ class SearchService:
             eligible_total = self.repository.count_search(eligible_request)
             closing_soon_total = self.repository.count_search(closing_request)
 
+        trace.append(f"최종 결과: {total:,}건")
+        elapsed_ms = round((perf_counter() - started_at) * 1000)
+        trace.append(f"처리시간: {elapsed_ms:,}ms")
+        settings = get_settings()
+        if settings.search_trace_enabled:
+            logger.info(
+                "검색 추적 %s",
+                json.dumps(
+                    {
+                        "searchId": search_id,
+                        "query": request.semantic_query[:500],
+                        "cacheHit": cache_hit,
+                        "total": total,
+                        "elapsedMs": elapsed_ms,
+                        "trace": trace,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
+        else:
+            trace = ["검색 추적 로그가 비활성화되어 있습니다."]
+
         return SearchResponse(
             query_plan=QueryPlan(
                 hard_filters={
@@ -113,6 +192,9 @@ class SearchService:
                     if request.semantic_query.strip()
                     else ""
                 ),
+                search_id=search_id,
+                search_trace=trace,
+                elapsed_ms=elapsed_ms,
             ),
             database_total=database_total,
             total=total,

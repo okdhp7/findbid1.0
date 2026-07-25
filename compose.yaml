@@ -69,6 +69,7 @@ services:
       SEMANTIC_MIN_SCORE: ${SEMANTIC_MIN_SCORE:-0.35}
       SEMANTIC_CANDIDATE_LIMIT: ${SEMANTIC_CANDIDATE_LIMIT:-5000}
       SEMANTIC_RESULT_CACHE_SECONDS: ${SEMANTIC_RESULT_CACHE_SECONDS:-120}
+      SEARCH_TRACE_ENABLED: ${SEARCH_TRACE_ENABLED:-true}
     volumes:
       - embedding-model-cache:/home/findbid/.cache/fastembed
     depends_on:

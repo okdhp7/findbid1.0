@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     semantic_min_score: float = 0.35
     semantic_candidate_limit: int = 5000
     semantic_result_cache_seconds: int = 120
+    search_trace_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

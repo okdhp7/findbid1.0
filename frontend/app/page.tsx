@@ -177,6 +177,10 @@ export default function Home() {
   const [averageScore, setAverageScore] = useState(0);
   const [interpretedConditions, setInterpretedConditions] = useState<string[]>([]);
   const [semanticEngine, setSemanticEngine] = useState("");
+  const [searchTrace, setSearchTrace] = useState<string[]>([]);
+  const [searchTraceId, setSearchTraceId] = useState("");
+  const [searchElapsedMs, setSearchElapsedMs] = useState(0);
+  const [searchTraceOpen, setSearchTraceOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<Bid | null>(null);
@@ -332,6 +336,9 @@ export default function Home() {
         queryPlan?: {
           interpretedConditions?: string[];
           semanticEngine?: string;
+          searchId?: string;
+          searchTrace?: string[];
+          elapsedMs?: number;
         };
         items: Bid[];
       };
@@ -354,6 +361,10 @@ export default function Home() {
       setAverageScore(data.averageScore);
       setInterpretedConditions(data.queryPlan?.interpretedConditions ?? []);
       setSemanticEngine(data.queryPlan?.semanticEngine ?? "");
+      setSearchTrace(data.queryPlan?.searchTrace ?? []);
+      setSearchTraceId(data.queryPlan?.searchId ?? "");
+      setSearchElapsedMs(data.queryPlan?.elapsedMs ?? 0);
+      setSearchTraceOpen(false);
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       if (requestId !== searchRequestIdRef.current) return;
@@ -366,6 +377,10 @@ export default function Home() {
       setAverageScore(0);
       setInterpretedConditions([]);
       setSemanticEngine("");
+      setSearchTrace([]);
+      setSearchTraceId("");
+      setSearchElapsedMs(0);
+      setSearchTraceOpen(false);
     } finally {
       if (requestId === searchRequestIdRef.current) {
         setSearched(true);
@@ -619,6 +634,33 @@ export default function Home() {
                 <span title={`사용 모델: ${semanticEngine}`}>의미 벡터 적용</span>
               )}
             </div>
+            {searchTrace.length > 0 && (
+              <div className="search-trace">
+                <button
+                  type="button"
+                  className="search-trace-toggle"
+                  aria-expanded={searchTraceOpen}
+                  aria-controls="search-trace-panel"
+                  onClick={() => setSearchTraceOpen((open) => !open)}
+                >
+                  <span>검색 과정 보기</span>
+                  <small>
+                    {searchElapsedMs.toLocaleString("ko-KR")}ms
+                    {searchTraceId && ` · ${searchTraceId}`}
+                  </small>
+                  <span aria-hidden="true">{searchTraceOpen ? "−" : "+"}</span>
+                </button>
+                {searchTraceOpen && (
+                  <div id="search-trace-panel" className="search-trace-panel">
+                    <ol>
+                      {searchTrace.map((entry, index) => (
+                        <li key={`${index}-${entry}`}>{entry}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>

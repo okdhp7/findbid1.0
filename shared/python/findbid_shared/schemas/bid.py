@@ -66,6 +66,9 @@ class QueryPlan(CamelModel):
     semantic_query: str = ""
     interpreted_conditions: list[str] = Field(default_factory=list)
     semantic_engine: str = ""
+    search_id: str = ""
+    search_trace: list[str] = Field(default_factory=list)
+    elapsed_ms: int = 0
 
 
 class SearchResponse(CamelModel):
