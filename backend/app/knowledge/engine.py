@@ -13,7 +13,13 @@ from .regions import find_regions, region_aliases
 
 
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣+#.]+")
-AMOUNT_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?")
+AMOUNT_CONDITION_PATTERN = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?\s*(이상|초과|이하|미만)?"
+)
+AMOUNT_RANGE_PATTERN = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?\s*(?:부터|~|-)\s*"
+    r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?\s*(?:까지)?"
+)
 CLOSING_PATTERN = re.compile(r"(\d+)\s*일\s*(?:이내|내)")
 PARTICIPANT_REGION_PATTERN = re.compile(
     r"(?:참가|입찰|본점|사업자|업체).{0,12}(?:지역|소재)"
@@ -42,6 +48,21 @@ IGNORED_TERMS = {
     "조건",
     "해당",
     "중",
+    "지역",
+    "찾고",
+    "원하는",
+    "가능한",
+}
+STRUCTURAL_TERMS = {
+    "분야",
+    "이상",
+    "초과",
+    "이하",
+    "미만",
+    "부터",
+    "까지",
+    "사이",
+    "범위",
 }
 PARTICLE_SUFFIXES = (
     "으로",
@@ -83,13 +104,17 @@ class KnowledgeEntity:
 class KnowledgeAnalysis:
     normalized_query: str
     terms: tuple[str, ...]
+    free_text_terms: tuple[str, ...]
     entities: tuple[KnowledgeEntity, ...]
     anchor_terms: tuple[str, ...]
     constraint_terms: tuple[str, ...]
     preferred_regions: tuple[str, ...]
     participant_regions: tuple[str, ...]
     category: str | None
+    min_budget: int | None
     max_budget: int | None
+    min_budget_inclusive: bool
+    max_budget_inclusive: bool
     closing_within_days: int | None
     excluded_terms: tuple[str, ...]
     conditions: tuple[str, ...]
@@ -102,12 +127,61 @@ def _strip_particle(token: str) -> str:
     return token
 
 
-def _amount(text: str) -> int | None:
-    match = AMOUNT_PATTERN.search(text)
-    if not match:
-        return None
-    multiplier = 100_000_000 if match.group(2) == "억" else 10_000
-    return int(float(match.group(1)) * multiplier)
+def _amount_value(number: str, unit: str) -> int:
+    multiplier = 100_000_000 if unit == "억" else 10_000
+    return int(float(number) * multiplier)
+
+
+def _budget_bounds(
+    text: str,
+) -> tuple[int | None, int | None, bool, bool]:
+    range_match = AMOUNT_RANGE_PATTERN.search(text)
+    if range_match:
+        return (
+            _amount_value(range_match.group(1), range_match.group(2)),
+            _amount_value(range_match.group(3), range_match.group(4)),
+            True,
+            True,
+        )
+
+    minimum: int | None = None
+    maximum: int | None = None
+    minimum_inclusive = True
+    maximum_inclusive = True
+    matches = list(AMOUNT_CONDITION_PATTERN.finditer(text))
+    for match in matches:
+        amount = _amount_value(match.group(1), match.group(2))
+        operator = match.group(3)
+        if operator == "이상":
+            minimum = amount
+            minimum_inclusive = True
+        elif operator == "초과":
+            minimum = amount
+            minimum_inclusive = False
+        elif operator == "미만":
+            maximum = amount
+            maximum_inclusive = False
+        else:
+            maximum = amount
+            maximum_inclusive = True
+    return minimum, maximum, minimum_inclusive, maximum_inclusive
+
+
+def _budget_label(amount: int) -> str:
+    if amount % 100_000_000 == 0:
+        return f"{amount // 100_000_000:,}억원"
+    if amount % 10_000 == 0:
+        return f"{amount // 10_000:,}만원"
+    return f"{amount:,}원"
+
+
+def _is_amount_token(token: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"\d+(?:\.\d+)?(?:억|만)?원?",
+            token,
+        )
+    )
 
 
 @lru_cache(maxsize=2048)
@@ -166,6 +240,16 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
             )
         )
 
+    recognized_tokens = {
+        _strip_particle(token.lower())
+        for entity in entities
+        for token in TOKEN_PATTERN.findall(entity.matched_text)
+    }
+    recognized_tokens.update(
+        _strip_particle(token.lower())
+        for matched, _ in region_matches
+        for token in TOKEN_PATTERN.findall(matched)
+    )
     category = next(
         (
             entity.canonical
@@ -175,7 +259,12 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         ),
         None,
     )
-    amount = _amount(original)
+    (
+        min_budget,
+        max_budget,
+        min_budget_inclusive,
+        max_budget_inclusive,
+    ) = _budget_bounds(original)
     closing_match = CLOSING_PATTERN.search(original)
     closing_days = int(closing_match.group(1)) if closing_match else None
 
@@ -197,6 +286,32 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         if exclusion_phrase:
             excluded.append(exclusion_phrase)
 
+    excluded_tokens = {
+        token
+        for phrase in excluded
+        for token in phrase.split()
+    }
+    free_text_tokens = [
+        term
+        for term in terms
+        if term not in STRUCTURAL_TERMS
+        and term not in recognized_tokens
+        and term not in excluded_tokens
+        and not _is_amount_token(term)
+    ]
+    free_text_terms = (
+        (" ".join(free_text_tokens),)
+        if free_text_tokens
+        else ()
+    )
+    semantic_terms = [
+        term
+        for term in terms
+        if term not in STRUCTURAL_TERMS
+        and term not in excluded_tokens
+        and not _is_amount_token(term)
+    ]
+
     institution_constraints = [
         entity.canonical.lower()
         for entity in entities
@@ -216,6 +331,7 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         if entity.domain in anchor_domains
         and entity.canonical not in excluded
     ]
+    anchor_terms.extend(free_text_terms)
     if not anchor_terms:
         anchor_terms = [
             term
@@ -231,8 +347,12 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         conditions.append(f"{suffix}: {region_label}")
     if category:
         conditions.append(category)
-    if amount:
-        conditions.append(f"{amount // 100_000_000:,}억원 이하")
+    if min_budget:
+        operator = "이상" if min_budget_inclusive else "초과"
+        conditions.append(f"{_budget_label(min_budget)} {operator}")
+    if max_budget:
+        operator = "이하" if max_budget_inclusive else "미만"
+        conditions.append(f"{_budget_label(max_budget)} {operator}")
     if closing_days:
         conditions.append(f"{closing_days}일 이내 마감")
     core_entities = [
@@ -254,19 +374,27 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         conditions.append(
             "검색 의도: " + " · ".join(dict.fromkeys(core_entities))
         )
+    if free_text_terms:
+        conditions.append(
+            "핵심어: " + " · ".join(free_text_terms)
+        )
     if excluded:
         conditions.append("제외: " + " · ".join(dict.fromkeys(excluded)))
 
     return KnowledgeAnalysis(
-        normalized_query=" ".join(terms) or original,
+        normalized_query=" ".join(semantic_terms) or original,
         terms=tuple(terms),
+        free_text_terms=free_text_terms,
         entities=tuple(entities),
         anchor_terms=tuple(dict.fromkeys(anchor_terms)),
         constraint_terms=tuple(dict.fromkeys(institution_constraints)),
         preferred_regions=tuple(dict.fromkeys(preferred_regions)),
         participant_regions=tuple(dict.fromkeys(participant_regions)),
         category=category,
-        max_budget=amount,
+        min_budget=min_budget,
+        max_budget=max_budget,
+        min_budget_inclusive=min_budget_inclusive,
+        max_budget_inclusive=max_budget_inclusive,
         closing_within_days=closing_days,
         excluded_terms=tuple(dict.fromkeys(excluded)),
         conditions=tuple(conditions),

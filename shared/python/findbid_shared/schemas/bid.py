@@ -49,6 +49,7 @@ class BidRecord(CamelModel):
 class SearchRequest(CamelModel):
     category: str | None = None
     region: str | None = None
+    min_budget: int | None = None
     max_budget: int | None = None
     include_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(default_factory=list)

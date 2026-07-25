@@ -487,12 +487,31 @@ class ExternalBidRepository:
                     params[name] = f"{prefix}%"
             conditions.append(f"({' OR '.join(region_conditions)})")
 
-        max_budget = request.max_budget or analysis.max_budget
-        if max_budget:
+        min_budget = request.min_budget or analysis.min_budget
+        if min_budget:
+            min_operator = (
+                ">="
+                if request.min_budget or analysis.min_budget_inclusive
+                else ">"
+            )
             conditions.append(
                 "coalesce(nullif(b.budget_amount, 0), "
                 "nullif(b.estimated_price, 0), nullif(b.base_price, 0), 0)"
-                " <= :max_budget"
+                f" {min_operator} :min_budget"
+            )
+            params["min_budget"] = min_budget
+
+        max_budget = request.max_budget or analysis.max_budget
+        if max_budget:
+            max_operator = (
+                "<="
+                if request.max_budget or analysis.max_budget_inclusive
+                else "<"
+            )
+            conditions.append(
+                "coalesce(nullif(b.budget_amount, 0), "
+                "nullif(b.estimated_price, 0), nullif(b.base_price, 0), 0)"
+                f" {max_operator} :max_budget"
             )
             params["max_budget"] = max_budget
         closing_days = (

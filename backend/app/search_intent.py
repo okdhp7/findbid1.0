@@ -25,7 +25,19 @@ def parse_semantic_intent(text: str) -> SemanticIntent:
     analysis = analyze_query(text)
     return SemanticIntent(
         normalized_query=analysis.normalized_query,
-        terms=analysis.terms,
+        terms=tuple(
+            term
+            for term in analysis.terms
+            if term not in {
+                "이상",
+                "초과",
+                "이하",
+                "미만",
+                "부터",
+                "까지",
+            }
+            and not any(character.isdigit() for character in term)
+        ),
         anchor_terms=analysis.anchor_terms,
         constraint_terms=analysis.constraint_terms,
         analysis=analysis,

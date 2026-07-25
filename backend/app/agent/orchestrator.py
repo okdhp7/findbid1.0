@@ -41,6 +41,7 @@ def build_search_request(text: str) -> SearchRequest:
     return SearchRequest(
         category=category,
         region=region,
+        min_budget=analysis.min_budget,
         max_budget=max_budget,
         include_keywords=include,
         exclude_keywords=exclude,

@@ -4,6 +4,7 @@ from app.knowledge.catalog import DOMAIN_CONCEPTS
 from app.repositories.external_bid_repository import ExternalBidRepository
 from app.search_intent import parse_semantic_intent
 from app.semantic.engine import SemanticSearchEngine
+from findbid_shared.schemas import SearchRequest
 
 
 def test_fallback_semantic_vector_prefers_related_document(monkeypatch) -> None:
@@ -117,9 +118,71 @@ def test_knowledge_analysis_extracts_amount_date_and_concepts() -> None:
     )
 
     assert analysis.category == "용역"
+    assert analysis.min_budget is None
     assert analysis.max_budget == 500_000_000
     assert analysis.closing_within_days == 7
     assert any(
         entity.canonical == "인공지능"
         for entity in analysis.entities
     )
+
+
+def test_budget_comparison_operators_are_preserved() -> None:
+    minimum = analyze_query("반도체 분야 장비 1억원 이상")
+    over = analyze_query("반도체 장비 1억원 초과")
+    under = analyze_query("반도체 장비 1억원 미만")
+    range_query = analyze_query("반도체 장비 1억원부터 5억원까지")
+
+    assert minimum.min_budget == 100_000_000
+    assert minimum.max_budget is None
+    assert "1억원 이상" in minimum.conditions
+    assert over.min_budget == 100_000_000
+    assert over.min_budget_inclusive is False
+    assert "1억원 초과" in over.conditions
+    assert under.max_budget == 100_000_000
+    assert under.max_budget_inclusive is False
+    assert "1억원 미만" in under.conditions
+    assert range_query.min_budget == 100_000_000
+    assert range_query.max_budget == 500_000_000
+    assert "1억원 이상" in range_query.conditions
+    assert "5억원 이하" in range_query.conditions
+
+
+def test_natural_language_minimum_budget_is_used_in_sql() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(
+            semantic_query="반도체 분야 장비 1억원 이상",
+        )
+    )
+
+    assert params["min_budget"] == 100_000_000
+    assert any(">= :min_budget" in condition for condition in conditions)
+    assert "max_budget" not in params
+
+
+def test_detail_budget_selection_remains_a_maximum_filter() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(max_budget=500_000_000)
+    )
+
+    assert params["max_budget"] == 500_000_000
+    assert any("<= :max_budget" in condition for condition in conditions)
+    assert "min_budget" not in params
+
+
+def test_unregistered_compound_keyword_is_shown_and_ranked() -> None:
+    analysis = analyze_query(
+        "1억원 이상 3억원 이하 폐기물 처리 용역"
+    )
+    intent = parse_semantic_intent(
+        "1억원 이상 3억원 이하 폐기물 처리 용역"
+    )
+
+    assert analysis.min_budget == 100_000_000
+    assert analysis.max_budget == 300_000_000
+    assert analysis.free_text_terms == ("폐기물 처리",)
+    assert "핵심어: 폐기물 처리" in analysis.conditions
+    assert "폐기물 처리" in intent.anchor_terms
+    assert intent.normalized_query == "폐기물 처리 용역"

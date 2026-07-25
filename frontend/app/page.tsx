@@ -866,7 +866,7 @@ export default function Home() {
                 <small>참가 가능</small>
                 <strong>{eligibleTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">조건 검색</span>
+              <span className="trend">조건 기준</span>
             </article>
             <article>
               <span className="metric-icon gold">✦</span>
@@ -874,7 +874,7 @@ export default function Home() {
                 <small>평균 적합도</small>
                 <strong>{averageScore.toLocaleString("ko-KR")}<em>점</em></strong>
               </div>
-              <span className="trend">조건 검색</span>
+              <span className="trend">조건 기준</span>
             </article>
             <article>
               <span className="metric-icon rose">◷</span>
@@ -882,7 +882,7 @@ export default function Home() {
                 <small>7일 내 마감</small>
                 <strong>{closingSoonTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend warning">조건 검색</span>
+              <span className="trend warning">조건 기준</span>
             </article>
           </div>
 

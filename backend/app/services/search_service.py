@@ -95,6 +95,7 @@ class SearchService:
                 hard_filters={
                     "category": request.category or "전체",
                     "region": request.region or "전체 지역",
+                    "minBudget": request.min_budget,
                     "maxBudget": request.max_budget,
                     "onlyEligible": request.only_eligible,
                     "closingWithinDays": request.closing_within_days,
