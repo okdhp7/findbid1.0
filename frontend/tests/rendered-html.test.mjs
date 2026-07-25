@@ -74,6 +74,75 @@ test("상세조건 변경 시 자동 검색하고 조건 적용 버튼을 유지
   assert.match(page, /조건 적용하기/);
 });
 
+test("저장한 검색조건에 키워드와 선택 조건을 표시한다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /\.\.\.DEFAULT_SEARCH,[\s\S]*?\.\.\.savedSearch\.filters/);
+  assert.match(page, /className="saved-search-item-conditions"/);
+  assert.match(page, /savedSearch\.filters\.includeKeyword\.trim\(\)/);
+  assert.match(page, /포함: \{savedSearch\.filters\.includeKeyword\}/);
+  assert.match(page, /savedSearch\.filters\.excludeKeyword\.trim\(\)/);
+  assert.match(page, /제외: \{savedSearch\.filters\.excludeKeyword\}/);
+  assert.match(page, /savedSearch\.filters\.onlyEligible/);
+  assert.match(page, /savedSearch\.filters\.closingSoon/);
+  assert.match(css, /\.app-shell \.saved-search-item-conditions/);
+  assert.match(css, /\.app-shell \.saved-search-item-conditions span\.exclude/);
+  const savedConditionStyle = css.match(/\.app-shell \.saved-search-item-conditions span\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(savedConditionStyle, /background:\s*var\(--panel-solid\)/);
+  assert.match(savedConditionStyle, /border:\s*1px solid var\(--border\)/);
+  assert.match(page, /<span>\{savedSearch\.filters\.category\}<\/span>/);
+  assert.match(page, /<span>\{savedSearch\.filters\.region\}<\/span>/);
+});
+
+test("AI 시맨틱 검색 입력창에서 Enter 키로 검색한다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /onKeyDown=\{\(event\) =>/);
+  assert.match(page, /event\.key !== "Enter"/);
+  assert.match(page, /event\.nativeEvent\.isComposing/);
+  assert.match(page, /event\.shiftKey/);
+  assert.match(page, /event\.preventDefault\(\)/);
+  assert.match(page, /semanticQuery: event\.currentTarget\.value/);
+  assert.match(page, /enterKeyHint="search"/);
+  assert.match(page, /className="search-button-icon"/);
+  assert.match(page, /className="search-button-label"/);
+  const searchButtonStyle = css.match(/\.app-shell \.search-button\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(searchButtonStyle, /font-size:\s*15px/);
+  const searchIconStyle = css.match(/\.app-shell \.search-button-icon svg\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(searchIconStyle, /height:\s*32px/);
+  assert.match(searchIconStyle, /width:\s*32px/);
+  const searchLabelStyle = css.match(/\.app-shell \.search-button-label\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(searchLabelStyle, /line-height:\s*1/);
+});
+
+test("공고 제목 상세정보와 AI 상세 분석을 서로 다른 창으로 제공한다", async () => {
+  const [page, css, bidsSource] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../lib/bids.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const \[noticeDetail, setNoticeDetail\]/);
+  assert.match(page, /className="bid-title"[\s\S]*?onClick=\{\(\) => setNoticeDetail\(bid\)\}/);
+  assert.match(page, /aria-label=\{`\$\{bid\.title\} AI 상세 분석`\}/);
+  assert.match(page, /aria-label="입찰공고 상세정보"/);
+  assert.match(page, /aria-label="AI 입찰공고 상세 분석"/);
+  assert.match(page, /공고 개요/);
+  assert.match(page, /참가 자격 및 조건/);
+  assert.match(page, /적합도 산정 근거/);
+  assert.match(page, /function OriginalNoticeAction/);
+  assert.match(page, /target="_blank"/);
+  assert.match(bidsSource, /sourceUrl\?: string \| null/);
+  assert.match(css, /\.app-shell \.notice-detail-title/);
+  assert.match(css, /\.app-shell \.notice-summary/);
+});
+
 test("공고 카드에 전체 검색결과 기준 연번을 표시한다", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),

@@ -1,6 +1,16 @@
 name: findbid
 
 services:
+  embedding-cache-init:
+    image: findbid/backend:local
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /cache && chown -R 10001:10001 /cache"]
+    restart: "no"
+    volumes:
+      - embedding-model-cache:/cache
+    security_opt:
+      - no-new-privileges:true
+
   frontend:
     image: findbid/frontend:local
     build:
@@ -51,7 +61,19 @@ services:
       S3_ENDPOINT: http://minio:9000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
       DEMO_MODE: ${DEMO_MODE:-true}
+      SEMANTIC_SEARCH_ENABLED: ${SEMANTIC_SEARCH_ENABLED:-true}
+      SEMANTIC_MODEL_NAME: ${SEMANTIC_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      SEMANTIC_MODEL_CACHE: /home/findbid/.cache/fastembed
+      HF_HOME: /home/findbid/.cache/fastembed/huggingface
+      XDG_CACHE_HOME: /home/findbid/.cache/fastembed
+      SEMANTIC_MIN_SCORE: ${SEMANTIC_MIN_SCORE:-0.35}
+      SEMANTIC_CANDIDATE_LIMIT: ${SEMANTIC_CANDIDATE_LIMIT:-5000}
+      SEMANTIC_RESULT_CACHE_SECONDS: ${SEMANTIC_RESULT_CACHE_SECONDS:-120}
+    volumes:
+      - embedding-model-cache:/home/findbid/.cache/fastembed
     depends_on:
+      embedding-cache-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -213,3 +235,4 @@ volumes:
   redis-data:
   opensearch-data:
   minio-data:
+  embedding-model-cache:

@@ -150,6 +150,7 @@ def calculate_hybrid_score(
     sme_only: bool,
     request: SearchRequest,
     company_profile: dict[str, Any],
+    semantic_similarity: int | None = None,
 ) -> HybridScore:
     normalized_corpus = _normalize(corpus)
     licenses = [str(value) for value in company_profile.get("licenses", [])]
@@ -213,7 +214,15 @@ def calculate_hybrid_score(
             else technologies
         ),
     ]
-    semantic_score, semantic_matches = _term_score(normalized_corpus, intent_values)
+    lexical_semantic_score, semantic_matches = _term_score(
+        normalized_corpus,
+        intent_values,
+    )
+    semantic_score = (
+        max(0, min(100, semantic_similarity))
+        if semantic_similarity is not None
+        else lexical_semantic_score
+    )
     keyword_score, keyword_matches = _term_score(
         normalized_corpus,
         list(request.include_keywords),

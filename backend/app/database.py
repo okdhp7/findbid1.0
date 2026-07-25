@@ -42,8 +42,9 @@ def get_bid_session() -> Generator[Session, None, None]:
 
 def initialize_database(retries: int = 20, interval_seconds: float = 1.5) -> None:
     from app.models.bid import BidNotice
+    from app.models.semantic_embedding import BidSemanticEmbedding
 
-    del BidNotice
+    del BidNotice, BidSemanticEmbedding
     for attempt in range(1, retries + 1):
         try:
             Base.metadata.create_all(bind=engine)

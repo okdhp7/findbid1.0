@@ -1,17 +1,38 @@
-import re
-
+from app.knowledge import analyze_query
 from findbid_shared.schemas import SearchRequest
 
 
-REGIONS = ["서울", "경기", "인천", "부산", "대구", "광주", "대전", "울산", "세종", "제주"]
+REGIONS = [
+    "서울",
+    "부산",
+    "대구",
+    "인천",
+    "광주",
+    "대전",
+    "울산",
+    "세종",
+    "경기",
+    "강원",
+    "충북",
+    "충남",
+    "전북",
+    "전남",
+    "경북",
+    "경남",
+    "제주",
+]
 TECH_KEYWORDS = ["AI", "인공지능", "LLM", "RAG", "Java", "React", "Python", "데이터", "GIS", "클라우드"]
 
 
 def build_search_request(text: str) -> SearchRequest:
-    region = next((name for name in REGIONS if name in text), None)
-    category = next((name for name in ["용역", "물품", "공사"] if name in text), None)
-    amount_match = re.search(r"(\d+(?:\.\d+)?)\s*억", text)
-    max_budget = int(float(amount_match.group(1)) * 100_000_000) if amount_match else None
+    analysis = analyze_query(text)
+    region = (
+        analysis.preferred_regions[0]
+        if len(analysis.preferred_regions) == 1
+        else None
+    )
+    category = analysis.category
+    max_budget = analysis.max_budget
     include = [keyword for keyword in TECH_KEYWORDS if keyword.lower() in text.lower()]
     exclude: list[str] = []
     for phrase in ["장비 납품", "상주 인력파견", "단순 유지보수"]:
@@ -25,3 +46,9 @@ def build_search_request(text: str) -> SearchRequest:
         exclude_keywords=exclude,
         semantic_query=text,
     )
+
+
+def describe_search_intent(text: str) -> list[str]:
+    if not text.strip():
+        return []
+    return list(analyze_query(text).conditions)

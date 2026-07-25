@@ -26,6 +26,7 @@ export type Bid = {
   risks: string[];
   tags: string[];
   isNew?: boolean;
+  sourceUrl?: string | null;
 };
 
 export const bids: Bid[] = [

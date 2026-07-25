@@ -63,6 +63,8 @@ class QueryPlan(CamelModel):
     hard_filters: dict = Field(default_factory=dict)
     keywords: dict = Field(default_factory=dict)
     semantic_query: str = ""
+    interpreted_conditions: list[str] = Field(default_factory=list)
+    semantic_engine: str = ""
 
 
 class SearchResponse(CamelModel):

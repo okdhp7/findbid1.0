@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 import math
 import re
 from datetime import datetime, timezone
@@ -9,13 +11,26 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
 from app.eligibility.rules import COMPANY_PROFILE
+from app.knowledge import analyze_query
+from app.repositories.semantic_embedding_repository import (
+    SemanticEmbeddingRepository,
+)
 from app.scoring import calculate_hybrid_score
+from app.search_intent import (
+    SemanticIntent,
+    matches_semantic_constraints,
+    parse_semantic_intent,
+    semantic_lexical_rank,
+)
+from app.semantic import get_semantic_search_engine
 from findbid_shared.config import get_settings
 from findbid_shared.schemas import BidRecord, SearchRequest
 
 
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
+logger = logging.getLogger(__name__)
 SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 REGION_PREFIXES = {
     "서울": ("서울특별시",),
@@ -113,18 +128,169 @@ class ExternalBidRepository:
 
     @staticmethod
     def _keyword_list(request: SearchRequest) -> list[str]:
-        words = [word.strip() for word in request.include_keywords if word.strip()]
-        words.extend(
-            word
-            for word in re.split(r"[\s,，.]+", request.semantic_query.strip())
-            if len(word) >= 2
+        words = list(
+            dict.fromkeys(
+                word.strip()
+                for word in request.include_keywords
+                if word.strip()
+            )
         )
+        if not get_settings().semantic_search_enabled:
+            words.extend(
+                word
+                for word in re.split(
+                    r"[\s,，.]+",
+                    request.semantic_query.strip(),
+                )
+                if len(word) >= 2
+            )
         return list(dict.fromkeys(words))
+
+    @staticmethod
+    def _document_text(row: dict[str, Any]) -> str:
+        values = [
+            str(row.get(key) or "")
+            for key in (
+                "title",
+                "description",
+                "category",
+                "sub_category",
+                "detail_category",
+                "item_group_name",
+                "noticer_name",
+                "agency_name",
+                "contract_method",
+                "winner_choice_method",
+                "region_restriction",
+            )
+        ]
+        values.extend(
+            str(value)
+            for value in (row.get("required_licenses") or [])
+        )
+        if row.get("sme_only"):
+            values.append("중소기업 소기업 소상공인 제한")
+        return " ".join(values)[:6000]
+
+    def _semantic_scores(
+        self,
+        rows: list[dict[str, Any]],
+        query: str,
+    ) -> dict[str, int]:
+        engine = get_semantic_search_engine()
+        if not query.strip() or not engine.enabled or not rows:
+            return {}
+
+        intent = parse_semantic_intent(query)
+        query_vector = engine.embed([intent.normalized_query])[0]
+        documents = {
+            str(row["bid_number"]): self._document_text(row)
+            for row in rows
+        }
+        hashes = {
+            bid_id: hashlib.sha256(document.encode("utf-8")).hexdigest()
+            for bid_id, document in documents.items()
+        }
+        vectors: dict[str, list[float]] = {}
+
+        if not engine.using_fallback:
+            try:
+                with SessionLocal() as semantic_session:
+                    repository = SemanticEmbeddingRepository(
+                        semantic_session,
+                        engine.engine_name,
+                    )
+                    vectors = repository.find_valid(hashes)
+                    missing_ids = [
+                        bid_id for bid_id in documents if bid_id not in vectors
+                    ]
+                    for start in range(0, len(missing_ids), 64):
+                        batch_ids = missing_ids[start : start + 64]
+                        batch_vectors = engine.embed(
+                            documents[bid_id] for bid_id in batch_ids
+                        )
+                        created = list(
+                            zip(batch_ids, batch_vectors, strict=True)
+                        )
+                        vectors.update(created)
+                        repository.upsert_many(
+                            [
+                                (bid_id, hashes[bid_id], vector)
+                                for bid_id, vector in created
+                            ]
+                        )
+            except Exception:
+                logger.exception(
+                    "내부 임베딩 캐시를 사용할 수 없어 현재 요청에서 직접 계산합니다."
+                )
+                vectors = {}
+
+        missing_ids = [bid_id for bid_id in documents if bid_id not in vectors]
+        if missing_ids:
+            missing_vectors = engine.embed(
+                documents[bid_id] for bid_id in missing_ids
+            )
+            vectors.update(zip(missing_ids, missing_vectors, strict=True))
+
+        return engine.score_vector(query_vector, vectors)
+
+    @classmethod
+    def _prioritize_semantic_rows(
+        cls,
+        rows: list[dict[str, Any]],
+        intent: SemanticIntent,
+        semantic_scores: dict[str, int],
+    ) -> list[dict[str, Any]]:
+        ranked: list[
+            tuple[tuple[int, int, int, int, int, int], int, dict[str, Any]]
+        ] = []
+        for row in rows:
+            bid_id = str(row["bid_number"])
+            document = cls._document_text(row)
+            lexical_rank = semantic_lexical_rank(
+                title=str(row.get("title") or ""),
+                document=document,
+                intent=intent,
+            )
+            ranked.append(
+                (
+                    lexical_rank,
+                    semantic_scores.get(bid_id, 0),
+                    row,
+                )
+            )
+
+        if intent.anchor_terms and any(item[0][1] > 0 for item in ranked):
+            ranked = [item for item in ranked if item[0][1] > 0]
+        if intent.constraint_terms:
+            ranked = [
+                item
+                for item in ranked
+                if matches_semantic_constraints(
+                    cls._document_text(item[2]),
+                    intent,
+                )
+            ]
+
+        ranked.sort(
+            key=lambda item: (
+                item[0][0],
+                item[0][1],
+                item[0][2],
+                item[0][3],
+                item[0][4],
+                item[0][5],
+                item[1],
+            ),
+            reverse=True,
+        )
+        return [item[2] for item in ranked]
 
     def _to_record(
         self,
         row: dict[str, Any],
         request: SearchRequest | None = None,
+        semantic_similarity: int | None = None,
     ) -> BidRecord:
         request = request or SearchRequest()
         budget = int(
@@ -192,6 +358,7 @@ class ExternalBidRepository:
             sme_only=bool(row.get("sme_only")),
             request=request,
             company_profile=COMPANY_PROFILE,
+            semantic_similarity=semantic_similarity,
         )
 
         return BidRecord.model_validate(
@@ -237,6 +404,7 @@ class ExternalBidRepository:
                         if row.get("open_date")
                         else None
                     ),
+                    "semanticSimilarity": semantic_similarity,
                 },
             }
         )
@@ -279,6 +447,7 @@ class ExternalBidRepository:
         self,
         request: SearchRequest,
     ) -> tuple[list[str], dict[str, Any], str]:
+        analysis = analyze_query(request.semantic_query)
         conditions = [
             "coalesce(b.status, 'open') = 'open'",
             "(b.deadline IS NULL OR b.deadline >= now())",
@@ -286,9 +455,14 @@ class ExternalBidRepository:
         params: dict[str, Any] = {}
         order_by = "b.announce_date DESC NULLS LAST, b.id DESC"
 
-        if request.category and request.category != "전체":
+        category = (
+            request.category
+            if request.category and request.category != "전체"
+            else analysis.category
+        )
+        if category:
             conditions.append("b.category = :category")
-            params["category"] = request.category
+            params["category"] = category
         if request.region and request.region != "전체 지역":
             region_conditions = ["b.region_name IS NULL"]
             prefixes = REGION_PREFIXES.get(request.region, (request.region,))
@@ -301,21 +475,49 @@ class ExternalBidRepository:
                 "CASE WHEN b.region_name IS NULL THEN 1 ELSE 0 END, "
                 + order_by
             )
-        if request.max_budget:
+        elif analysis.participant_regions:
+            region_conditions = ["b.region_name IS NULL"]
+            for region_index, region in enumerate(analysis.participant_regions):
+                prefixes = REGION_PREFIXES.get(region, (region,))
+                for prefix_index, prefix in enumerate(prefixes):
+                    name = (
+                        f"intent_region_{region_index}_{prefix_index}"
+                    )
+                    region_conditions.append(f"b.region_name LIKE :{name}")
+                    params[name] = f"{prefix}%"
+            conditions.append(f"({' OR '.join(region_conditions)})")
+
+        max_budget = request.max_budget or analysis.max_budget
+        if max_budget:
             conditions.append(
                 "coalesce(nullif(b.budget_amount, 0), "
                 "nullif(b.estimated_price, 0), nullif(b.base_price, 0), 0)"
                 " <= :max_budget"
             )
-            params["max_budget"] = request.max_budget
-        if request.closing_within_days:
+            params["max_budget"] = max_budget
+        closing_days = (
+            request.closing_within_days
+            or analysis.closing_within_days
+        )
+        if closing_days:
             conditions.append(
                 "b.deadline <= now() + make_interval(days => :closing_days)"
             )
-            params["closing_days"] = request.closing_within_days
+            params["closing_days"] = closing_days
 
         includes = self._keyword_list(request)
-        excludes = [word.strip() for word in request.exclude_keywords if word.strip()]
+        excludes = list(
+            dict.fromkeys(
+                [
+                    *(
+                        word.strip()
+                        for word in request.exclude_keywords
+                        if word.strip()
+                    ),
+                    *analysis.excluded_terms,
+                ]
+            )
+        )
         corpus = self._corpus()
         if includes:
             keyword_conditions = []
@@ -333,32 +535,73 @@ class ExternalBidRepository:
 
     def _ranked_records(self, request: SearchRequest) -> list[BidRecord]:
         conditions, params, order_by = self._search_parts(request)
+        semantic_enabled = (
+            bool(request.semantic_query.strip())
+            and get_semantic_search_engine().enabled
+        )
+        limit_clause = ""
+        if semantic_enabled:
+            limit_clause = "LIMIT :semantic_candidate_limit"
+            params["semantic_candidate_limit"] = (
+                get_settings().semantic_candidate_limit
+            )
         statement = text(
             f"""
             SELECT {self._columns()}
             FROM {self.table_name} AS b
             WHERE {' AND '.join(conditions)}
             ORDER BY {order_by}
+            {limit_clause}
             """
         )
-        rows = self.session.execute(statement, params).mappings().all()
-        records = [self._to_record(dict(row), request) for row in rows]
+        rows = [
+            dict(row)
+            for row in self.session.execute(statement, params).mappings().all()
+        ]
+        semantic_scores = self._semantic_scores(rows, request.semantic_query)
+        if semantic_enabled:
+            rows = [
+                row
+                for row in rows
+                if str(row["bid_number"]) in semantic_scores
+            ]
+            rows = self._prioritize_semantic_rows(
+                rows,
+                parse_semantic_intent(request.semantic_query),
+                semantic_scores,
+            )
+        records = [
+            self._to_record(
+                row,
+                request,
+                semantic_scores.get(str(row["bid_number"])),
+            )
+            for row in rows
+        ]
         if request.only_eligible:
             records = [
                 record for record in records if record.eligibility == "참가 가능"
             ]
+        if semantic_enabled:
+            record_order = {
+                str(row["bid_number"]): index
+                for index, row in enumerate(rows)
+            }
+            return sorted(
+                records,
+                key=lambda item: (
+                    record_order.get(item.id, len(record_order)),
+                    -item.score,
+                ),
+            )
         return sorted(records, key=lambda item: item.score, reverse=True)
 
     def search_with_metrics(
         self,
         request: SearchRequest,
     ) -> tuple[list[BidRecord], int, int]:
-        ranked_records = self._ranked_records(request)
-        total = len(ranked_records)
-        average_score = (
-            round(sum(record.score for record in ranked_records) / total)
-            if total
-            else 0
+        ranked_records, total, average_score, _, _ = (
+            self.search_with_dashboard_metrics(request)
         )
         start = (request.page - 1) * request.limit
         return (
@@ -366,6 +609,59 @@ class ExternalBidRepository:
             total,
             average_score,
         )
+
+    @staticmethod
+    def _closes_within(record: BidRecord, days: int | None) -> bool:
+        if not days:
+            return True
+        return (
+            record.close_at != "마감일 미정"
+            and record.days_left <= days
+        )
+
+    def search_with_dashboard_metrics(
+        self,
+        request: SearchRequest,
+    ) -> tuple[list[BidRecord], int, int, int, int]:
+        base_request = request.model_copy(
+            update={
+                "only_eligible": False,
+                "closing_within_days": None,
+                "page": 1,
+            }
+        )
+        base_records = self._ranked_records(base_request)
+
+        records = [
+            record
+            for record in base_records
+            if self._closes_within(record, request.closing_within_days)
+            and (
+                not request.only_eligible
+                or record.eligibility == "참가 가능"
+            )
+        ]
+        total = len(records)
+        average_score = (
+            round(sum(record.score for record in records) / total)
+            if total
+            else 0
+        )
+        eligible_total = sum(
+            record.eligibility == "참가 가능"
+            and self._closes_within(record, request.closing_within_days)
+            for record in base_records
+        )
+        closing_days = min(request.closing_within_days or 7, 7)
+        closing_soon_total = sum(
+            self._closes_within(record, closing_days)
+            and (
+                not request.only_eligible
+                or record.eligibility == "참가 가능"
+            )
+            for record in base_records
+        )
+        return records, total, average_score, eligible_total, closing_soon_total
 
     def search_with_total(
         self,
@@ -379,7 +675,11 @@ class ExternalBidRepository:
         return records
 
     def count_search(self, request: SearchRequest) -> int:
-        if request.only_eligible:
+        semantic_enabled = (
+            bool(request.semantic_query.strip())
+            and get_semantic_search_engine().enabled
+        )
+        if request.only_eligible or semantic_enabled:
             return len(self._ranked_records(request))
         conditions, params, _ = self._search_parts(request)
         statement = text(

@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     internal_api_key: str = "change-this-in-production"
     backend_internal_url: str = "http://backend:8000"
     demo_mode: bool = True
+    semantic_search_enabled: bool = True
+    semantic_model_name: str = (
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+    semantic_model_cache: str = "/home/findbid/.cache/fastembed"
+    semantic_min_score: float = 0.35
+    semantic_candidate_limit: int = 5000
+    semantic_result_cache_seconds: int = 120
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -109,6 +109,26 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+function OriginalNoticeAction({ bid }: { bid: Bid }) {
+  if (!bid.sourceUrl) {
+    return (
+      <button className="primary-action" type="button" disabled>
+        원문 주소 없음
+      </button>
+    );
+  }
+  return (
+    <a
+      className="primary-action"
+      href={bid.sourceUrl}
+      target="_blank"
+      rel="noreferrer"
+    >
+      나라장터 원문 보기 →
+    </a>
+  );
+}
+
 function Toggle({
   checked,
   onChange,
@@ -155,9 +175,12 @@ export default function Home() {
   const [eligibleTotal, setEligibleTotal] = useState(0);
   const [closingSoonTotal, setClosingSoonTotal] = useState(0);
   const [averageScore, setAverageScore] = useState(0);
+  const [interpretedConditions, setInterpretedConditions] = useState<string[]>([]);
+  const [semanticEngine, setSemanticEngine] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<Bid | null>(null);
+  const [noticeDetail, setNoticeDetail] = useState<Bid | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -170,13 +193,19 @@ export default function Home() {
       if (!stored) return [];
       const parsed = JSON.parse(stored) as SavedSearch[];
       return Array.isArray(parsed)
-        ? parsed.map((savedSearch) => ({
-            ...savedSearch,
-            filters: {
+        ? parsed.map((savedSearch) => {
+            const filters = {
+              ...DEFAULT_SEARCH,
               ...savedSearch.filters,
-              region: normalizeRegionFilter(savedSearch.filters.region),
-            },
-          }))
+            };
+            return {
+              ...savedSearch,
+              filters: {
+                ...filters,
+                region: normalizeRegionFilter(filters.region),
+              },
+            };
+          })
         : [];
     } catch {
       return [];
@@ -201,6 +230,17 @@ export default function Home() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [filtersOpen]);
+
+  useEffect(() => {
+    if (!selected && !noticeDetail) return;
+    const closeDrawerOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSelected(null);
+      setNoticeDetail(null);
+    };
+    window.addEventListener("keydown", closeDrawerOnEscape);
+    return () => window.removeEventListener("keydown", closeDrawerOnEscape);
+  }, [selected, noticeDetail]);
 
   const filteredBids = useMemo(() => {
     const include = includeKeyword
@@ -289,6 +329,10 @@ export default function Home() {
         eligibleTotal: number;
         closingSoonTotal: number;
         averageScore: number;
+        queryPlan?: {
+          interpretedConditions?: string[];
+          semanticEngine?: string;
+        };
         items: Bid[];
       };
       if (
@@ -308,6 +352,8 @@ export default function Home() {
       setEligibleTotal(data.eligibleTotal);
       setClosingSoonTotal(data.closingSoonTotal);
       setAverageScore(data.averageScore);
+      setInterpretedConditions(data.queryPlan?.interpretedConditions ?? []);
+      setSemanticEngine(data.queryPlan?.semanticEngine ?? "");
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       if (requestId !== searchRequestIdRef.current) return;
@@ -318,6 +364,8 @@ export default function Home() {
       setEligibleTotal(0);
       setClosingSoonTotal(0);
       setAverageScore(0);
+      setInterpretedConditions([]);
+      setSemanticEngine("");
     } finally {
       if (requestId === searchRequestIdRef.current) {
         setSearched(true);
@@ -504,8 +552,8 @@ export default function Home() {
             <div className="search-head">
               <div>
                 <span className="spark" aria-hidden="true">✦</span>
-                <strong>AI 시맨틱 검색</strong>
-                <span className="beta">BETA</span>
+                <strong>AI 시맨틱 검색</strong> <span className="section-kicker">AI SYMANTIC SEARCH</span>
+                {/* <span className="beta">BETA</span> */}
               </div>
               <button type="button" onClick={() => setSemanticQuery("")}>
                 입력 지우기
@@ -514,22 +562,62 @@ export default function Home() {
             <div className="semantic-input">
               <textarea
                 value={semanticQuery}
-                onChange={(event) => setSemanticQuery(event.target.value)}
+                onChange={(event) => {
+                  setSemanticQuery(event.target.value);
+                  setInterpretedConditions([]);
+                  setSemanticEngine("");
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "Enter"
+                    || event.shiftKey
+                    || event.nativeEvent.isComposing
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  runSearchNow({
+                    ...currentSearchSnapshot(),
+                    semanticQuery: event.currentTarget.value,
+                  });
+                }}
+                enterKeyHint="search"
                 aria-label="찾고 싶은 입찰사업을 자연어로 입력"
                 placeholder="예: 수도권 공공기관의 AI 기반 웹서비스 구축 사업. Java, React, Python 기술을 활용하고 5억원 이하인 사업을 찾습니다."
               />
               <button type="button" onClick={() => runSearchNow(currentSearchSnapshot())} className="search-button">
-                <span aria-hidden="true">⌕</span>
-                {searched ? "AI로 검색" : "분석 중…"}
+                <span className="search-button-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <circle cx="10.5" cy="10.5" r="6.5" />
+                    <path d="m15.5 15.5 5 5" />
+                  </svg>
+                </span>
+                <span className="search-button-label">
+                  {searched ? "AI로 검색" : "분석 중…"}
+                </span>
               </button>
             </div>
             <div className="parsed-intent">
               <span className="intent-label">AI가 이해한 조건</span>
-              <span>수도권</span>
-              <span>5억원 이하</span>
-              <span>AI · 웹서비스</span>
-              <span>Java · React · Python</span>
-              <span className="exclude">장비 납품 제외</span>
+              {semanticQuery.trim() ? (
+                interpretedConditions.length > 0 ? (
+                  interpretedConditions.map((condition) => (
+                    <span
+                      key={condition}
+                      className={condition.startsWith("제외:") ? "exclude" : undefined}
+                    >
+                      {condition}
+                    </span>
+                  ))
+                ) : (
+                  <span>문장 전체 의미로 검색</span>
+                )
+              ) : (
+                <span>자연어 검색어를 입력해 주세요.</span>
+              )}
+              {semanticEngine && (
+                <span title={`사용 모델: ${semanticEngine}`}>의미 벡터 적용</span>
+              )}
             </div>
           </div>
         </div>
@@ -550,12 +638,12 @@ export default function Home() {
         <aside
           id="mobile-filters"
           className={`filters ${filtersOpen ? "mobile-open" : ""}`}
-          aria-label="상세 검색 조건"
+          aria-label="검색 상세 조건"
         >
           <div className="aside-title">
             <div>
               <span className="section-kicker">SEARCH FILTER</span>
-              <h2>상세 조건</h2>
+              <h2>검색 상세 조건</h2>
             </div>
             <button
               type="button"
@@ -770,7 +858,7 @@ export default function Home() {
                 <small>전체 공고</small>
                 <strong>{databaseTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">DB 검색 결과</span>
+              <span className="trend">DB 검색</span>
             </article>
             <article>
               <span className="metric-icon blue">✓</span>
@@ -778,7 +866,7 @@ export default function Home() {
                 <small>참가 가능</small>
                 <strong>{eligibleTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">조건 기준</span>
+              <span className="trend">조건 검색</span>
             </article>
             <article>
               <span className="metric-icon gold">✦</span>
@@ -786,7 +874,7 @@ export default function Home() {
                 <small>평균 적합도</small>
                 <strong>{averageScore.toLocaleString("ko-KR")}<em>점</em></strong>
               </div>
-              <span className="trend">조건 기준</span>
+              <span className="trend">조건 검색</span>
             </article>
             <article>
               <span className="metric-icon rose">◷</span>
@@ -794,7 +882,7 @@ export default function Home() {
                 <small>7일 내 마감</small>
                 <strong>{closingSoonTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend warning">조건 기준</span>
+              <span className="trend warning">조건 검색</span>
             </article>
           </div>
 
@@ -888,7 +976,7 @@ export default function Home() {
                     <button
                       className="bid-title"
                       type="button"
-                      onClick={() => setSelected(bid)}
+                      onClick={() => setNoticeDetail(bid)}
                     >
                       {bid.title}
                     </button>
@@ -924,7 +1012,11 @@ export default function Home() {
                     <span>입찰 마감</span>
                     <strong>D-{bid.daysLeft}</strong>
                     <time>{bid.closeAt}</time>
-                    <button type="button" onClick={() => setSelected(bid)}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(bid)}
+                      aria-label={`${bid.title} AI 상세 분석`}
+                    >
                       상세 분석
                       <span>→</span>
                     </button>
@@ -1018,7 +1110,138 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Detail Drawer ── */}
+      {/* ── Notice Detail Drawer ── */}
+      {noticeDetail && (
+        <div
+          className="drawer-layer"
+          role="presentation"
+          onMouseDown={() => setNoticeDetail(null)}
+        >
+          <aside
+            className="detail-drawer notice-detail-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="입찰공고 상세정보"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="drawer-head">
+              <div>
+                <span className={`category category-${noticeDetail.category}`}>
+                  {noticeDetail.category}
+                </span>
+                <span>{noticeDetail.noticeNo}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNoticeDetail(null)}
+                aria-label="공고 상세정보 창 닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="notice-detail-title">
+              <span className="section-kicker">NOTICE INFORMATION</span>
+              <h2>{noticeDetail.title}</h2>
+              <div>
+                <StatusBadge value={noticeDetail.eligibility} />
+                {noticeDetail.isNew && <span className="new-badge">NEW</span>}
+              </div>
+            </div>
+
+            <section className="notice-summary">
+              <h3>공고 개요</h3>
+              <p>
+                {noticeDetail.summary || "등록된 공고 설명이 없습니다. 원문 공고에서 세부 내용을 확인해 주세요."}
+              </p>
+            </section>
+
+            <div className="drawer-grid notice-fact-grid">
+              <div>
+                <span>공고번호</span>
+                <strong>{noticeDetail.noticeNo}</strong>
+              </div>
+              <div>
+                <span>업무 구분</span>
+                <strong>{noticeDetail.category}</strong>
+              </div>
+              <div>
+                <span>공고기관</span>
+                <strong>{noticeDetail.agency}</strong>
+              </div>
+              <div>
+                <span>수요기관</span>
+                <strong>{noticeDetail.demandAgency}</strong>
+              </div>
+              <div>
+                <span>추정금액</span>
+                <strong>{noticeDetail.budgetLabel}</strong>
+              </div>
+              <div>
+                <span>마감일시</span>
+                <strong>{noticeDetail.closeAt}</strong>
+              </div>
+              <div>
+                <span>계약방법</span>
+                <strong>{noticeDetail.contractMethod}</strong>
+              </div>
+              <div>
+                <span>낙찰방법</span>
+                <strong>{noticeDetail.awardMethod}</strong>
+              </div>
+              <div>
+                <span>참가 지역</span>
+                <strong>{noticeDetail.region}</strong>
+              </div>
+              <div>
+                <span>참가 상태</span>
+                <strong>{noticeDetail.eligibility}</strong>
+              </div>
+            </div>
+
+            <section className="analysis-section notice-requirements">
+              <h3>
+                <span className="dot navy" />
+                참가 자격 및 조건
+              </h3>
+              <ul>
+                {noticeDetail.requirements.length > 0
+                  ? noticeDetail.requirements.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))
+                  : <li>등록된 참가 제한 조건이 없습니다.</li>}
+              </ul>
+            </section>
+
+            <section className="analysis-section">
+              <h3>
+                <span className="dot good" />
+                공고 분류
+              </h3>
+              <ul>
+                {noticeDetail.tags.length > 0
+                  ? noticeDetail.tags.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))
+                  : <li>{noticeDetail.category}</li>}
+              </ul>
+            </section>
+
+            <div className="drawer-actions">
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => toggleSaved(noticeDetail.id)}
+              >
+                {saved.includes(noticeDetail.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
+              </button>
+              <OriginalNoticeAction bid={noticeDetail} />
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* ── AI Analysis Drawer ── */}
       {selected && (
         <div
           className="drawer-layer"
@@ -1029,7 +1252,7 @@ export default function Home() {
             className="detail-drawer"
             role="dialog"
             aria-modal="true"
-            aria-label="입찰공고 상세 분석"
+            aria-label="AI 입찰공고 상세 분석"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="drawer-head">
@@ -1151,9 +1374,7 @@ export default function Home() {
               >
                 {saved.includes(selected.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
               </button>
-              <button className="primary-action" type="button">
-                나라장터 원문 보기 →
-              </button>
+              <OriginalNoticeAction bid={selected} />
             </div>
           </aside>
         </div>
@@ -1224,9 +1445,27 @@ export default function Home() {
                   <article className="saved-search-item" key={savedSearch.id}>
                     <div>
                       <strong>{savedSearch.name}</strong>
-                      <small>
-                        {savedSearch.filters.category} · {savedSearch.filters.region} · {budgetOptions.find((option) => option.value === savedSearch.filters.maxBudget)?.label || "금액 전체"}
-                      </small>
+                      <div className="saved-search-item-conditions">
+                        <span>{savedSearch.filters.category}</span>
+                        <span>{savedSearch.filters.region}</span>
+                        <span>
+                          {budgetOptions.find((option) => option.value === savedSearch.filters.maxBudget)?.label || "금액 전체"}
+                        </span>
+                        {savedSearch.filters.includeKeyword.trim() && (
+                          <span>포함: {savedSearch.filters.includeKeyword}</span>
+                        )}
+                        {savedSearch.filters.excludeKeyword.trim() && (
+                          <span className="exclude">
+                            제외: {savedSearch.filters.excludeKeyword}
+                          </span>
+                        )}
+                        {savedSearch.filters.onlyEligible && (
+                          <span>참가 가능만</span>
+                        )}
+                        {savedSearch.filters.closingSoon && (
+                          <span>7일 내 마감</span>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <button type="button" onClick={() => applySavedSearch(savedSearch)}>
