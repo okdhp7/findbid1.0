@@ -38,12 +38,27 @@ class BidRecord(CamelModel):
     eligibility: str = "확인 필요"
     summary: str = ""
     matched: list[str] = Field(default_factory=list)
+    matched_conditions: list[str] = Field(default_factory=list)
     requirements: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     is_new: bool = False
     source_url: str | None = None
     raw_data: dict = Field(default_factory=dict)
+
+
+class CompanyProfileInput(CamelModel):
+    name: str = Field(default="", max_length=120)
+    location: str = Field(default="", max_length=120)
+    size: str = Field(default="", max_length=40)
+    licenses: list[str] = Field(default_factory=list, max_length=50)
+    technologies: list[str] = Field(default_factory=list, max_length=50)
+    business_areas: list[str] = Field(default_factory=list, max_length=50)
+    experiences: list[str] = Field(default_factory=list, max_length=50)
+    preferred_max_budget: int | None = Field(default=None, ge=0)
+    service_regions: list[str] = Field(default_factory=list, max_length=50)
+    excluded_business_areas: list[str] = Field(default_factory=list, max_length=50)
+    completion: int = Field(default=0, ge=0, le=100)
 
 
 class SearchRequest(CamelModel):
@@ -56,6 +71,7 @@ class SearchRequest(CamelModel):
     only_eligible: bool = False
     closing_within_days: int | None = None
     semantic_query: str = ""
+    company_profile: CompanyProfileInput | None = None
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=200)
 

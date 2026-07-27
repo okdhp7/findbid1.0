@@ -22,6 +22,7 @@ export type Bid = {
   eligibility: Eligibility;
   summary: string;
   matched: string[];
+  matchedConditions?: string[];
   requirements: string[];
   risks: string[];
   tags: string[];
@@ -166,11 +167,30 @@ export const bids: Bid[] = [
   },
 ];
 
-export const companyProfile = {
+export type CompanyProfile = {
+  name: string;
+  location: string;
+  size: string;
+  licenses: string[];
+  technologies: string[];
+  businessAreas: string[];
+  experiences: string[];
+  preferredMaxBudget: number | null;
+  serviceRegions: string[];
+  excludedBusinessAreas: string[];
+  completion: number;
+};
+
+export const companyProfile: CompanyProfile = {
   name: "아이비즈토피아",
   location: "경기도 성남시",
   size: "중소기업",
   licenses: ["소프트웨어사업자", "정보통신공사업"],
   technologies: ["생성형 AI", "Java", "React", "Python", "데이터 플랫폼"],
+  businessAreas: ["공공 SI", "AI·웹서비스 구축"],
+  experiences: [],
+  preferredMaxBudget: null,
+  serviceRegions: ["전국"],
+  excludedBusinessAreas: [],
   completion: 86,
 };

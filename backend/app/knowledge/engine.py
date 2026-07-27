@@ -25,6 +25,12 @@ PARTICIPANT_REGION_PATTERN = re.compile(
     r"(?:참가|입찰|본점|사업자|업체).{0,12}(?:지역|소재)"
     r"|(?:지역|소재).{0,12}(?:참가|입찰|제한)"
 )
+DEMAND_AGENCY_PATTERN = re.compile(
+    r"수요\s*기관(?:은|는|이|가)?\s*[:：]?\s*"
+    r"([0-9A-Za-z가-힣㈜()·.\-\s]{2,100}?)"
+    r"(?=\s*(?:이고|이며|,|;|계약\s*(?:방법|방식)"
+    r"|일반\s*경쟁|제한\s*경쟁|수의\s*계약|$))"
+)
 REQUEST_PHRASES = (
     "검색해 주세요",
     "검색해주세요",
@@ -52,9 +58,13 @@ IGNORED_TERMS = {
     "찾고",
     "원하는",
     "가능한",
+    "방식",
+    "방법",
 }
 STRUCTURAL_TERMS = {
     "분야",
+    "금액",
+    "사업금액",
     "이상",
     "초과",
     "이하",
@@ -65,6 +75,7 @@ STRUCTURAL_TERMS = {
     "범위",
 }
 PARTICLE_SUFFIXES = (
+    "이고",
     "으로",
     "에서",
     "에게",
@@ -87,6 +98,7 @@ PARTICLE_SUFFIXES = (
     "에",
     "도",
     "만",
+    "인",
 )
 
 
@@ -110,6 +122,8 @@ class KnowledgeAnalysis:
     constraint_terms: tuple[str, ...]
     preferred_regions: tuple[str, ...]
     participant_regions: tuple[str, ...]
+    demand_agencies: tuple[str, ...]
+    contract_methods: tuple[str, ...]
     category: str | None
     min_budget: int | None
     max_budget: int | None
@@ -240,6 +254,23 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
             )
         )
 
+    demand_agencies: list[str] = []
+    for match in DEMAND_AGENCY_PATTERN.finditer(original):
+        agency = " ".join(match.group(1).split()).strip(" ,;")
+        if not agency or agency in demand_agencies:
+            continue
+        demand_agencies.append(agency)
+        entities.append(
+            KnowledgeEntity(
+                domain="수요기관",
+                canonical=agency,
+                matched_text=match.group(0),
+                confidence=1.0,
+                values=(agency,),
+                hard_filter=True,
+            )
+        )
+
     recognized_tokens = {
         _strip_particle(token.lower())
         for entity in entities
@@ -259,6 +290,11 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         ),
         None,
     )
+    contract_methods = [
+        entity.canonical
+        for entity in entities
+        if entity.domain == "계약 방법"
+    ]
     (
         min_budget,
         max_budget,
@@ -332,7 +368,7 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         and entity.canonical not in excluded
     ]
     anchor_terms.extend(free_text_terms)
-    if not anchor_terms:
+    if not anchor_terms and not demand_agencies and not contract_methods:
         anchor_terms = [
             term
             for term in terms
@@ -347,6 +383,15 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         conditions.append(f"{suffix}: {region_label}")
     if category:
         conditions.append(category)
+    if demand_agencies:
+        conditions.append(
+            "수요기관: " + " · ".join(demand_agencies)
+        )
+    if contract_methods:
+        conditions.append(
+            "계약방법: "
+            + " · ".join(dict.fromkeys(contract_methods))
+        )
     if min_budget:
         operator = "이상" if min_budget_inclusive else "초과"
         conditions.append(f"{_budget_label(min_budget)} {operator}")
@@ -367,6 +412,8 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
             "상대적 날짜",
             "검색 명령 표현",
             "제외 의도",
+            "수요기관",
+            "계약 방법",
         }
         and entity.canonical not in excluded
     ]
@@ -390,6 +437,8 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         constraint_terms=tuple(dict.fromkeys(institution_constraints)),
         preferred_regions=tuple(dict.fromkeys(preferred_regions)),
         participant_regions=tuple(dict.fromkeys(participant_regions)),
+        demand_agencies=tuple(demand_agencies),
+        contract_methods=tuple(dict.fromkeys(contract_methods)),
         category=category,
         min_budget=min_budget,
         max_budget=max_budget,

@@ -79,3 +79,26 @@ def test_semantic_cache_key_is_shared_between_pages() -> None:
 
     assert _cache_key(first_page) == _cache_key(second_page)
     assert _cache_key(first_page) != _cache_key(different_filter)
+
+
+def test_semantic_cache_key_separates_company_profiles() -> None:
+    first_profile = SearchRequest(
+        semantic_query="AI 웹서비스",
+        company_profile={
+            "name": "첫 번째 기업",
+            "location": "서울특별시",
+            "technologies": ["React"],
+            "completion": 80,
+        },
+    )
+    second_profile = SearchRequest(
+        semantic_query="AI 웹서비스",
+        company_profile={
+            "name": "두 번째 기업",
+            "location": "부산광역시",
+            "technologies": ["Python"],
+            "completion": 90,
+        },
+    )
+
+    assert _cache_key(first_profile) != _cache_key(second_profile)

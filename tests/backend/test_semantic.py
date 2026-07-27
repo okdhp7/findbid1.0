@@ -172,6 +172,133 @@ def test_detail_budget_selection_remains_a_maximum_filter() -> None:
     assert "min_budget" not in params
 
 
+def test_explicit_semantic_conditions_override_conflicting_detail_filters() -> None:
+    query = "서울 소재 업체가 참가 가능한 7일 이내 1억원 이하 용역"
+    analysis = analyze_query(query)
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(
+            semantic_query=query,
+            category="물품",
+            region="부산",
+            max_budget=500_000_000,
+            closing_within_days=30,
+        )
+    )
+
+    assert analysis.category == "용역"
+    assert analysis.participant_regions == ("서울",)
+    assert params["category"] == "용역"
+    assert params["max_budget"] == 100_000_000
+    assert params["closing_days"] == 7
+    assert any("intent_region_0_0" in condition for condition in conditions)
+    assert not any("region_prefix_0" in condition for condition in conditions)
+
+
+def test_demand_agency_and_contract_method_are_hard_filters() -> None:
+    query = "수요기관이 한국소비자원이고 제한경쟁 방식인 용역"
+    analysis = analyze_query(query)
+
+    assert analysis.category == "용역"
+    assert analysis.demand_agencies == ("한국소비자원",)
+    assert analysis.contract_methods == ("제한경쟁",)
+    assert analysis.anchor_terms == ()
+    assert "수요기관: 한국소비자원" in analysis.conditions
+    assert "계약방법: 제한경쟁" in analysis.conditions
+
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(semantic_query=query)
+    )
+
+    assert params["category"] == "용역"
+    assert params["demand_agency_0"] == "%한국소비자원%"
+    assert params["contract_method_0"] == "%제한경쟁%"
+    assert any("b.agency_name" in condition for condition in conditions)
+    assert any("b.contract_method" in condition for condition in conditions)
+
+    matched_conditions = repository._matched_search_conditions(
+        {
+            "agency_name": "한국소비자원",
+            "contract_method": "제한경쟁입찰",
+        },
+        SearchRequest(semantic_query=query),
+    )
+    assert matched_conditions == [
+        "수요기관: 한국소비자원",
+        "계약방법: 제한경쟁",
+    ]
+
+
+def test_search_conditions_are_not_shown_when_not_requested() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    matched_conditions = repository._matched_search_conditions(
+        {
+            "agency_name": "한국소비자원",
+            "contract_method": "제한경쟁입찰",
+        },
+        SearchRequest(semantic_query="소비자 조사 용역"),
+    )
+    assert matched_conditions == []
+
+
+def test_semantic_budget_is_shown_as_a_matched_search_condition() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    matched_conditions = repository._matched_search_conditions(
+        {"contract_method": "일반경쟁입찰"},
+        SearchRequest(
+            semantic_query="폐기물 처리 일반경쟁 중에서 1억 이하"
+        ),
+    )
+    assert matched_conditions == [
+        "계약방법: 일반경쟁",
+        "사업금액: 1억원 이하",
+    ]
+
+
+def test_zero_detail_budget_uses_semantic_budget_condition() -> None:
+    query = "수학여행 사업금액은 1억원 이하"
+    analysis = analyze_query(query)
+    repository = object.__new__(ExternalBidRepository)
+    matched_conditions = repository._matched_search_conditions(
+        {},
+        SearchRequest(
+            semantic_query=query,
+            max_budget=0,
+        ),
+    )
+
+    assert analysis.max_budget == 100_000_000
+    assert "사업금액" not in analysis.free_text_terms
+    assert matched_conditions == ["사업금액: 1억원 이하"]
+
+
+def test_semantic_budget_display_overrides_conflicting_detail_budget() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    matched_conditions = repository._matched_search_conditions(
+        {},
+        SearchRequest(
+            semantic_query="수학여행 사업금액은 1억원 이하",
+            max_budget=500_000_000,
+        ),
+    )
+
+    assert matched_conditions == ["사업금액: 1억원 이하"]
+
+
+def test_semantic_budget_range_is_shown_as_a_search_condition() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    matched_conditions = repository._matched_search_conditions(
+        {},
+        SearchRequest(
+            semantic_query="1억원 이상 3억원 이하 폐기물 처리 용역"
+        ),
+    )
+    assert matched_conditions == [
+        "사업금액: 1억원 이상 ~ 3억원 이하",
+    ]
+
+
 def test_unregistered_compound_keyword_is_shown_and_ranked() -> None:
     analysis = analyze_query(
         "1억원 이상 3억원 이하 폐기물 처리 용역"

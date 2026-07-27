@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { companyProfile, type Bid } from "../lib/bids";
+import {
+  companyProfile as DEFAULT_COMPANY_PROFILE,
+  type Bid,
+  type CompanyProfile,
+} from "../lib/bids";
 
 const categories = ["전체", "용역", "물품", "공사"] as const;
 const regions = [
@@ -71,6 +75,103 @@ type SavedSearch = {
 };
 
 const SAVED_SEARCHES_KEY = "findbid.saved-searches.v1";
+const SEMANTIC_HISTORY_KEY = "findbid.semantic-history.v1";
+const SEMANTIC_HISTORY_LIMIT = 10;
+const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
+
+type CompanyProfileDraft = {
+  name: string;
+  location: string;
+  size: string;
+  licenses: string;
+  technologies: string;
+  businessAreas: string;
+  experiences: string;
+  preferredMaxBudget: string;
+  serviceRegions: string;
+  excludedBusinessAreas: string;
+};
+
+function normalizeProfileList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+}
+
+function normalizeCompanyProfile(value: unknown): CompanyProfile {
+  if (!value || typeof value !== "object") return { ...DEFAULT_COMPANY_PROFILE };
+  const profile = value as Partial<CompanyProfile>;
+  const preferredMaxBudget = Number(profile.preferredMaxBudget);
+  return {
+    name: typeof profile.name === "string" && profile.name.trim()
+      ? profile.name.trim().slice(0, 120)
+      : DEFAULT_COMPANY_PROFILE.name,
+    location: typeof profile.location === "string"
+      ? profile.location.trim().slice(0, 120)
+      : DEFAULT_COMPANY_PROFILE.location,
+    size: typeof profile.size === "string" && profile.size.trim()
+      ? profile.size.trim().slice(0, 40)
+      : DEFAULT_COMPANY_PROFILE.size,
+    licenses: normalizeProfileList(profile.licenses),
+    technologies: normalizeProfileList(profile.technologies),
+    businessAreas: normalizeProfileList(profile.businessAreas),
+    experiences: normalizeProfileList(profile.experiences),
+    preferredMaxBudget: Number.isFinite(preferredMaxBudget) && preferredMaxBudget > 0
+      ? Math.round(preferredMaxBudget)
+      : null,
+    serviceRegions: normalizeProfileList(profile.serviceRegions),
+    excludedBusinessAreas: normalizeProfileList(profile.excludedBusinessAreas),
+    completion: typeof profile.completion === "number"
+      ? Math.max(0, Math.min(100, Math.round(profile.completion)))
+      : DEFAULT_COMPANY_PROFILE.completion,
+  };
+}
+
+function profileToDraft(profile: CompanyProfile): CompanyProfileDraft {
+  return {
+    name: profile.name,
+    location: profile.location,
+    size: profile.size,
+    licenses: profile.licenses.join(", "),
+    technologies: profile.technologies.join(", "),
+    businessAreas: profile.businessAreas.join(", "),
+    experiences: profile.experiences.join(", "),
+    preferredMaxBudget: profile.preferredMaxBudget
+      ? String(profile.preferredMaxBudget / 100_000_000)
+      : "",
+    serviceRegions: profile.serviceRegions.join(", "),
+    excludedBusinessAreas: profile.excludedBusinessAreas.join(", "),
+  };
+}
+
+function splitProfileValues(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(/[,，\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 50);
+}
+
+function profileCompletion(profile: Omit<CompanyProfile, "completion">): number {
+  let completion = 0;
+  if (profile.name) completion += 15;
+  if (profile.location) completion += 15;
+  if (profile.size) completion += 15;
+  if (profile.licenses.length) completion += 10;
+  if (profile.technologies.length) completion += 10;
+  if (profile.businessAreas.length) completion += 10;
+  if (profile.serviceRegions.length) completion += 11;
+  if (profile.experiences.length) completion += 5;
+  if (profile.preferredMaxBudget) completion += 5;
+  if (profile.excludedBusinessAreas.length) completion += 5;
+  return Math.min(100, completion);
+}
 
 function normalizeRegionFilter(region: string) {
   return region === "전국" ? "전체 지역" : region;
@@ -92,6 +193,97 @@ function StatusBadge({ value }: { value: Bid["eligibility"] }) {
         ? "status status-check"
         : "status status-bad";
   return <span className={className}>{value}</span>;
+}
+
+function AgencyName({ bidId, name }: { bidId: string; name: string }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const tooltipId = `agency-tooltip-${bidId}`;
+
+  useEffect(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const measure = () => {
+      setIsTruncated(
+        trigger.scrollHeight > trigger.clientHeight + 1
+        || trigger.scrollWidth > trigger.clientWidth + 1,
+      );
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(trigger);
+    return () => observer.disconnect();
+  }, [name]);
+
+  return (
+    <div className="agency-tooltip">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`agency-tooltip-trigger${isTruncated ? " is-truncated" : ""}`}
+        aria-describedby={isTruncated ? tooltipId : undefined}
+      >
+        {name}
+      </button>
+      {isTruncated && (
+        <span
+          id={tooltipId}
+          className="agency-tooltip-content"
+          role="tooltip"
+        >
+          {name}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function BidTitle({ bid, onOpen }: { bid: Bid; onOpen: () => void }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const tooltipId = `bid-title-tooltip-${bid.id}`;
+
+  useEffect(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const measure = () => {
+      setIsTruncated(
+        trigger.scrollWidth > trigger.clientWidth + 1
+        || trigger.scrollHeight > trigger.clientHeight + 1,
+      );
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(trigger);
+    return () => observer.disconnect();
+  }, [bid.title]);
+
+  return (
+    <div className="bid-title-tooltip">
+      <button
+        ref={triggerRef}
+        className={`bid-title${isTruncated ? " is-truncated" : ""}`}
+        type="button"
+        onClick={onOpen}
+        aria-describedby={isTruncated ? tooltipId : undefined}
+      >
+        {bid.title}
+      </button>
+      {isTruncated && (
+        <span
+          id={tooltipId}
+          className="bid-title-tooltip-content"
+          role="tooltip"
+        >
+          {bid.title}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function ScoreRing({ score }: { score: number }) {
@@ -156,6 +348,7 @@ function Toggle({
 export default function Home() {
   const resultTopRef = useRef<HTMLDivElement>(null);
   const resultBottomRef = useRef<HTMLDivElement>(null);
+  const semanticHistoryRef = useRef<HTMLDivElement>(null);
   const autoSearchTimerRef = useRef<number | null>(null);
   const searchAbortControllerRef = useRef<AbortController | null>(null);
   const searchRequestIdRef = useRef(0);
@@ -165,6 +358,9 @@ export default function Home() {
   const [includeKeyword, setIncludeKeyword] = useState(DEFAULT_SEARCH.includeKeyword);
   const [excludeKeyword, setExcludeKeyword] = useState(DEFAULT_SEARCH.excludeKeyword);
   const [semanticQuery, setSemanticQuery] = useState(DEFAULT_SEARCH.semanticQuery);
+  const [semanticQueryActive, setSemanticQueryActive] = useState(false);
+  const [semanticHistoryOpen, setSemanticHistoryOpen] = useState(false);
+  const [semanticHistory, setSemanticHistory] = useState<string[]>([]);
   const [onlyEligible, setOnlyEligible] = useState(DEFAULT_SEARCH.onlyEligible);
   const [closingSoon, setClosingSoon] = useState(DEFAULT_SEARCH.closingSoon);
   const [sort, setSort] = useState("score");
@@ -186,7 +382,14 @@ export default function Home() {
   const [selected, setSelected] = useState<Bid | null>(null);
   const [noticeDetail, setNoticeDetail] = useState<Bid | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
+    ...DEFAULT_COMPANY_PROFILE,
+  });
+  const companyProfileRef = useRef(companyProfile);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<CompanyProfileDraft>(() =>
+    profileToDraft(companyProfile),
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [saveSearchOpen, setSaveSearchOpen] = useState(false);
   const [savedSearchName, setSavedSearchName] = useState("");
@@ -219,6 +422,40 @@ export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("light");
 
   useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(SEMANTIC_HISTORY_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as unknown;
+      if (!Array.isArray(parsed)) {
+        window.localStorage.removeItem(SEMANTIC_HISTORY_KEY);
+        return;
+      }
+      const restoredHistory = parsed
+        .filter((query): query is string =>
+          typeof query === "string" && Boolean(query.trim()),
+        )
+        .map((query) => query.trim())
+        .slice(0, SEMANTIC_HISTORY_LIMIT);
+      setSemanticHistory(restoredHistory);
+    } catch {
+      window.localStorage.removeItem(SEMANTIC_HISTORY_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(COMPANY_PROFILE_KEY);
+      if (!stored) return;
+      const restoredProfile = normalizeCompanyProfile(JSON.parse(stored));
+      companyProfileRef.current = restoredProfile;
+      setCompanyProfile(restoredProfile);
+      setProfileDraft(profileToDraft(restoredProfile));
+    } catch {
+      window.localStorage.removeItem(COMPANY_PROFILE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!filtersOpen || !window.matchMedia("(max-width: 860px)").matches) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -246,34 +483,36 @@ export default function Home() {
     return () => window.removeEventListener("keydown", closeDrawerOnEscape);
   }, [selected, noticeDetail]);
 
-  const filteredBids = useMemo(() => {
-    const include = includeKeyword
-      .split(/[,，]/)
-      .map((word) => word.trim().toLowerCase())
-      .filter(Boolean);
-    const exclude = excludeKeyword
-      .split(/[,，]/)
-      .map((word) => word.trim().toLowerCase())
-      .filter(Boolean);
+  useEffect(() => {
+    if (!semanticHistoryOpen) return;
 
-    return resultBids
-      .filter((bid) => category === "전체" || bid.category === category)
-      .filter((bid) => region === "전체 지역" || bid.region === region || bid.region === "전국")
-      .filter((bid) => !maxBudget || bid.budget <= maxBudget)
-      .filter((bid) => !onlyEligible || bid.eligibility === "참가 가능")
-      .filter((bid) => !closingSoon || bid.daysLeft <= 7)
-      .filter((bid) => {
-        const text = [bid.title, bid.summary, ...bid.tags, ...bid.matched].join(" ").toLowerCase();
-        const hasIncluded = include.length === 0 || include.some((word) => text.includes(word));
-        const hasExcluded = exclude.some((word) => text.includes(word));
-        return hasIncluded && !hasExcluded;
-      })
-      .sort((a, b) => {
+    const closeHistory = (event: PointerEvent) => {
+      if (
+        semanticHistoryRef.current
+        && !semanticHistoryRef.current.contains(event.target as Node)
+      ) {
+        setSemanticHistoryOpen(false);
+      }
+    };
+    const closeHistoryOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSemanticHistoryOpen(false);
+    };
+
+    window.addEventListener("pointerdown", closeHistory);
+    window.addEventListener("keydown", closeHistoryOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeHistory);
+      window.removeEventListener("keydown", closeHistoryOnEscape);
+    };
+  }, [semanticHistoryOpen]);
+
+  const filteredBids = useMemo(() => {
+    return [...resultBids].sort((a, b) => {
         if (sort === "closing") return a.daysLeft - b.daysLeft;
         if (sort === "budget") return b.budget - a.budget;
         return b.score - a.score;
       });
-  }, [resultBids, category, region, maxBudget, includeKeyword, excludeKeyword, onlyEligible, closingSoon, sort]);
+  }, [resultBids, sort]);
 
   const totalPages = Math.ceil(searchTotal / PAGE_SIZE);
   const pageWindowStart = Math.max(
@@ -320,6 +559,7 @@ export default function Home() {
           onlyEligible: snapshot.onlyEligible,
           closingWithinDays: snapshot.closingSoon ? 7 : null,
           semanticQuery: snapshot.semanticQuery,
+          companyProfile: companyProfileRef.current,
           page,
           limit: PAGE_SIZE,
         }),
@@ -399,11 +639,81 @@ export default function Home() {
     void runSearch(snapshot, page);
   };
 
+  const rememberSemanticQuery = (query: string) => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return;
+
+    setSemanticHistory((current) => {
+      const comparisonQuery = normalizedQuery.toLocaleLowerCase("ko-KR");
+      const next = [
+        normalizedQuery,
+        ...current.filter(
+          (savedQuery) => savedQuery.toLocaleLowerCase("ko-KR") !== comparisonQuery,
+        ),
+      ].slice(0, SEMANTIC_HISTORY_LIMIT);
+      window.localStorage.setItem(SEMANTIC_HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const runSemanticSearchNow = (snapshot: SearchSnapshot) => {
+    const normalizedQuery = snapshot.semanticQuery.trim();
+    rememberSemanticQuery(normalizedQuery);
+    setSemanticQueryActive(Boolean(normalizedQuery));
+    setSemanticHistoryOpen(false);
+    runSearchNow({
+      ...snapshot,
+      semanticQuery: normalizedQuery,
+    });
+  };
+
+  const selectSemanticHistory = (query: string) => {
+    setSemanticQuery(query);
+    setSemanticQueryActive(false);
+    setInterpretedConditions([]);
+    setSemanticEngine("");
+    setSearchTrace([]);
+    setSearchTraceId("");
+    setSearchElapsedMs(0);
+    setSearchTraceOpen(false);
+    setSemanticHistoryOpen(false);
+  };
+
+  const deleteSemanticHistory = (query: string) => {
+    setSemanticHistory((current) => {
+      const next = current.filter((savedQuery) => savedQuery !== query);
+      window.localStorage.setItem(SEMANTIC_HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
+    showSaveNotice("저장된 AI 검색어를 삭제했습니다.");
+  };
+
+  const clearSemanticHistory = () => {
+    setSemanticHistory([]);
+    window.localStorage.removeItem(SEMANTIC_HISTORY_KEY);
+    setSemanticHistoryOpen(false);
+    showSaveNotice("저장된 AI 검색어를 모두 삭제했습니다.");
+  };
+
+  const prepareSemanticAnalysisState = (nextSemanticQuery: string) => {
+    searchRequestIdRef.current += 1;
+    searchAbortControllerRef.current?.abort();
+    setSemanticQueryActive(Boolean(nextSemanticQuery.trim()));
+    setInterpretedConditions([]);
+    setSemanticEngine("");
+    setSearchTrace([]);
+    setSearchTraceId("");
+    setSearchElapsedMs(0);
+    setSearchTraceOpen(false);
+  };
+
   const scheduleDetailSearch = (snapshot: SearchSnapshot, delay: number) => {
+    const detailSnapshot = { ...snapshot };
+    prepareSemanticAnalysisState(detailSnapshot.semanticQuery);
     cancelScheduledSearch();
     autoSearchTimerRef.current = window.setTimeout(() => {
       autoSearchTimerRef.current = null;
-      void runSearch(snapshot, 1);
+      void runSearch(detailSnapshot, 1);
     }, delay);
   };
 
@@ -435,6 +745,52 @@ export default function Home() {
     window.setTimeout(() => setSaveNotice(""), 2400);
   };
 
+  const openCompanyProfile = () => {
+    setProfileDraft(profileToDraft(companyProfile));
+    setProfileOpen(true);
+  };
+
+  const saveCompanyProfile = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const budgetEok = Number(profileDraft.preferredMaxBudget);
+    const profileWithoutCompletion: Omit<CompanyProfile, "completion"> = {
+      name: profileDraft.name.trim().slice(0, 120),
+      location: profileDraft.location.trim().slice(0, 120),
+      size: profileDraft.size.trim().slice(0, 40),
+      licenses: splitProfileValues(profileDraft.licenses),
+      technologies: splitProfileValues(profileDraft.technologies),
+      businessAreas: splitProfileValues(profileDraft.businessAreas),
+      experiences: splitProfileValues(profileDraft.experiences),
+      preferredMaxBudget: Number.isFinite(budgetEok) && budgetEok > 0
+        ? Math.min(Math.round(budgetEok * 100_000_000), 100_000_000_000_000)
+        : null,
+      serviceRegions: splitProfileValues(profileDraft.serviceRegions),
+      excludedBusinessAreas: splitProfileValues(profileDraft.excludedBusinessAreas),
+    };
+    const nextProfile: CompanyProfile = {
+      ...profileWithoutCompletion,
+      completion: profileCompletion(profileWithoutCompletion),
+    };
+
+    try {
+      window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
+    } catch {
+      showSaveNotice("기업 프로필을 브라우저에 저장하지 못했습니다.");
+      return;
+    }
+
+    companyProfileRef.current = nextProfile;
+    setCompanyProfile(nextProfile);
+    setProfileDraft(profileToDraft(nextProfile));
+    setProfileOpen(false);
+    showSaveNotice("기업 프로필을 저장하고 검색에 반영했습니다.");
+    runSearchNow(currentSearchSnapshot());
+  };
+
+  const restoreDefaultCompanyProfile = () => {
+    setProfileDraft(profileToDraft(DEFAULT_COMPANY_PROFILE));
+  };
+
   const persistSavedSearches = (next: SavedSearch[]) => {
     setSavedSearches(next);
     window.localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(next));
@@ -456,7 +812,10 @@ export default function Home() {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name,
         createdAt: new Date().toISOString(),
-        filters: currentSearchSnapshot(),
+        filters: {
+          ...currentSearchSnapshot(),
+          semanticQuery: "",
+        },
       },
       ...savedSearches,
     ].slice(0, 20);
@@ -469,13 +828,14 @@ export default function Home() {
     const snapshot = {
       ...savedSearch.filters,
       region: normalizeRegionFilter(savedSearch.filters.region),
+      semanticQuery,
     };
     setCategory(snapshot.category);
     setRegion(snapshot.region);
     setMaxBudget(snapshot.maxBudget);
     setIncludeKeyword(snapshot.includeKeyword);
     setExcludeKeyword(snapshot.excludeKeyword);
-    setSemanticQuery(snapshot.semanticQuery);
+    prepareSemanticAnalysisState(snapshot.semanticQuery);
     setOnlyEligible(snapshot.onlyEligible);
     setClosingSoon(snapshot.closingSoon);
     setSaveSearchOpen(false);
@@ -499,10 +859,51 @@ export default function Home() {
       {/* ── Topbar ── */}
       <header className="topbar">
         <a className="logo" href="#top" aria-label="FindBid 홈">
-          <span className="logo-symbol">F</span>
+          <span className="logo-symbol" aria-hidden="true">
+            <svg viewBox="0 0 40 40" focusable="false">
+              <defs>
+                <linearGradient id="findbid-logo-gradient" x1="5" y1="3" x2="35" y2="37">
+                  <stop offset="0" stopColor="#5ea2ff" />
+                  <stop offset="0.48" stopColor="#2f73ec" />
+                  <stop offset="1" stopColor="#1645bd" />
+                </linearGradient>
+                <linearGradient id="findbid-lens-gradient" x1="20" y1="20" x2="31" y2="31">
+                  <stop offset="0" stopColor="#e7f6ff" />
+                  <stop offset="1" stopColor="#8edcff" />
+                </linearGradient>
+              </defs>
+              <rect
+                className="logo-tile"
+                x="1"
+                y="1"
+                width="38"
+                height="38"
+                rx="11"
+                fill="url(#findbid-logo-gradient)"
+              />
+              <path
+                className="logo-tile-highlight"
+                d="M8 3.5h20.5A8 8 0 0 1 36.5 11"
+              />
+              <text className="logo-bid-mark" x="6.7" y="21.4">Bid</text>
+              <circle
+                className="logo-lens"
+                cx="25.3"
+                cy="25.1"
+                r="5.1"
+                fill="rgba(18, 61, 149, 0.56)"
+                stroke="url(#findbid-lens-gradient)"
+              />
+              <path className="logo-lens-handle" d="m29.1 28.9 3.6 3.6" />
+              <circle className="logo-lens-glint" cx="23.6" cy="23.4" r="1" />
+            </svg>
+          </span>
           <span className="logo-copy">
-            <strong>Find<span>Bid</span></strong>
-            <small>AI BID SEARCHER</small>
+            <strong>
+              <span className="word-find">Find</span>
+              <span className="word-bid">Bid</span>
+            </strong>
+            <small>AI Bid Searcher</small>
           </span>
         </a>
 
@@ -533,7 +934,7 @@ export default function Home() {
             <span aria-hidden="true">♢</span>
             <i />
           </button>
-          <button className="profile-button" type="button" onClick={() => setProfileOpen(true)}>
+          <button className="profile-button" type="button" onClick={openCompanyProfile}>
             <span className="avatar">IB</span>
             <span className="profile-copy">
               <strong>{companyProfile.name}</strong>
@@ -551,15 +952,14 @@ export default function Home() {
         <div className="hero-inner">
           <div className="eyebrow">
             <span />
-            AI PROCUREMENT INTELLIGENCE
+            SMART BID SEARCHING
           </div>
           <h1>
             우리 회사에 맞는 입찰,<br />
             <span>AI가 먼저 찾아드립니다.</span>
           </h1>
           <p>
-            나라장터 공고와 제안요청서를 분석해<br />
-            참가 가능한 사업만 정교하게 선별합니다.
+            검색 의도를 분석해 최적의 입찰공고를 탐색하여 분석정보와 함께 제공합니다.
           </p>
 
           {/* Semantic Search Card */}
@@ -570,15 +970,79 @@ export default function Home() {
                 <strong>AI 시맨틱 검색</strong> <span className="section-kicker">AI SYMANTIC SEARCH</span>
                 {/* <span className="beta">BETA</span> */}
               </div>
-              <button type="button" onClick={() => setSemanticQuery("")}>
-                입력 지우기
-              </button>
+              <div className="search-head-actions">
+                <div className="semantic-history" ref={semanticHistoryRef}>
+                  <button
+                    type="button"
+                    className="semantic-history-toggle"
+                    aria-expanded={semanticHistoryOpen}
+                    aria-controls="semantic-history-panel"
+                    onClick={() => setSemanticHistoryOpen((open) => !open)}
+                  >
+                    최근 검색어
+                    <span>{semanticHistory.length}</span>
+                  </button>
+                  {semanticHistoryOpen && (
+                    <div
+                      id="semantic-history-panel"
+                      className="semantic-history-panel"
+                      aria-label="저장된 AI 검색어"
+                    >
+                      <div className="semantic-history-head">
+                        <strong>저장된 AI 검색어</strong>
+                        {semanticHistory.length > 0 && (
+                          <button type="button" onClick={clearSemanticHistory}>
+                            전체 삭제
+                          </button>
+                        )}
+                      </div>
+                      {semanticHistory.length === 0 ? (
+                        <p>저장된 검색어가 없습니다.</p>
+                      ) : (
+                        <ul>
+                          {semanticHistory.map((query) => (
+                            <li key={query}>
+                              <button
+                                type="button"
+                                className="semantic-history-select"
+                                onClick={() => selectSemanticHistory(query)}
+                                title={query}
+                              >
+                                {query}
+                              </button>
+                              <button
+                                type="button"
+                                className="semantic-history-delete"
+                                onClick={() => deleteSemanticHistory(query)}
+                                aria-label={`‘${query}’ 검색어 삭제`}
+                              >
+                                삭제
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="semantic-input-clear"
+                  onClick={() => {
+                    setSemanticQuery("");
+                    prepareSemanticAnalysisState("");
+                  }}
+                >
+                  입력 지우기
+                </button>
+              </div>
             </div>
             <div className="semantic-input">
               <textarea
                 value={semanticQuery}
                 onChange={(event) => {
                   setSemanticQuery(event.target.value);
+                  setSemanticQueryActive(false);
                   setInterpretedConditions([]);
                   setSemanticEngine("");
                 }}
@@ -591,7 +1055,7 @@ export default function Home() {
                     return;
                   }
                   event.preventDefault();
-                  runSearchNow({
+                  runSemanticSearchNow({
                     ...currentSearchSnapshot(),
                     semanticQuery: event.currentTarget.value,
                   });
@@ -600,7 +1064,13 @@ export default function Home() {
                 aria-label="찾고 싶은 입찰사업을 자연어로 입력"
                 placeholder="예: 수도권 공공기관의 AI 기반 웹서비스 구축 사업. Java, React, Python 기술을 활용하고 5억원 이하인 사업을 찾습니다."
               />
-              <button type="button" onClick={() => runSearchNow(currentSearchSnapshot())} className="search-button">
+              <button
+                type="button"
+                onClick={() => {
+                  runSemanticSearchNow(currentSearchSnapshot());
+                }}
+                className="search-button"
+              >
                 <span className="search-button-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" focusable="false">
                     <circle cx="10.5" cy="10.5" r="6.5" />
@@ -615,7 +1085,9 @@ export default function Home() {
             <div className="parsed-intent">
               <span className="intent-label">AI가 이해한 조건</span>
               {semanticQuery.trim() ? (
-                interpretedConditions.length > 0 ? (
+                !semanticQueryActive ? (
+                  <span>입력 문장은 아직 검색에 적용되지 않았습니다.</span>
+                ) : interpretedConditions.length > 0 ? (
                   interpretedConditions.map((condition) => (
                     <span
                       key={condition}
@@ -630,7 +1102,7 @@ export default function Home() {
               ) : (
                 <span>자연어 검색어를 입력해 주세요.</span>
               )}
-              {semanticEngine && (
+              {semanticQueryActive && semanticEngine && (
                 <span title={`사용 모델: ${semanticEngine}`}>의미 벡터 적용</span>
               )}
             </div>
@@ -741,7 +1213,7 @@ export default function Home() {
               </select>
             </div>
             <div>
-              <label htmlFor="budget">사업 금액</label>
+              <label htmlFor="budget">사업금액</label>
               <select
                 id="budget"
                 value={maxBudget}
@@ -833,12 +1305,21 @@ export default function Home() {
           </div>
 
           {/* Action Buttons */}
+          {/*
           <button
             className="apply-button"
             type="button"
             onClick={() => { runSearchNow(currentSearchSnapshot()); setFiltersOpen(false); }}
           >
             조건 적용하기
+          </button>
+          */}
+          <button
+            className="apply-button"
+            type="button"
+            onClick={openSaveSearch}
+          >
+            ＋ 검색조건 저장/선택
           </button>
           <button
             className="reset-button"
@@ -859,6 +1340,7 @@ export default function Home() {
               setMaxBudget(0);
               setIncludeKeyword("");
               setExcludeKeyword("");
+              prepareSemanticAnalysisState(resetSnapshot.semanticQuery);
               setOnlyEligible(false);
               setClosingSoon(false);
               runSearchNow(resetSnapshot);
@@ -900,7 +1382,6 @@ export default function Home() {
                 <small>전체 공고</small>
                 <strong>{databaseTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">DB 검색</span>
             </article>
             <article>
               <span className="metric-icon blue">✓</span>
@@ -908,7 +1389,6 @@ export default function Home() {
                 <small>참가 가능</small>
                 <strong>{eligibleTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend">조건 기준</span>
             </article>
             <article>
               <span className="metric-icon gold">✦</span>
@@ -916,7 +1396,6 @@ export default function Home() {
                 <small>평균 적합도</small>
                 <strong>{averageScore.toLocaleString("ko-KR")}<em>점</em></strong>
               </div>
-              <span className="trend">조건 기준</span>
             </article>
             <article>
               <span className="metric-icon rose">◷</span>
@@ -924,7 +1403,6 @@ export default function Home() {
                 <small>7일 내 마감</small>
                 <strong>{closingSoonTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
-              <span className="trend warning">조건 기준</span>
             </article>
           </div>
 
@@ -947,12 +1425,9 @@ export default function Home() {
                   {searchTotal.toLocaleString("ko-KR")}<em>건</em>
                 </span>
               </h2>
-              <p>기업 프로필과 선택 조건을 기준으로 관련성이 높은 순서입니다.</p>
+              <p>기업 프로필과 검색 조건을 반영한 입찰공고입니다.</p>
             </div>
             <div className="toolbar-actions">
-              <button type="button" className="save-search" onClick={openSaveSearch}>
-                ＋ 검색조건 저장
-              </button>
               <select
                 aria-label="정렬 기준"
                 value={sort}
@@ -1015,22 +1490,19 @@ export default function Home() {
                         {saved.includes(bid.id) ? "◆" : "◇"}
                       </button>
                     </div>
-                    <button
-                      className="bid-title"
-                      type="button"
-                      onClick={() => setNoticeDetail(bid)}
-                    >
-                      {bid.title}
-                    </button>
+                    <BidTitle
+                      bid={bid}
+                      onOpen={() => setNoticeDetail(bid)}
+                    />
                     <p className="bid-summary">{bid.summary}</p>
 
                     <div className="bid-facts">
                       <div>
                         <span>수요기관</span>
-                        <strong>{bid.demandAgency}</strong>
+                        <AgencyName bidId={bid.id} name={bid.demandAgency} />
                       </div>
                       <div>
-                        <span>추정금액</span>
+                        <span>사업금액</span>
                         <strong>{bid.budgetLabel}</strong>
                       </div>
                       <div>
@@ -1044,10 +1516,24 @@ export default function Home() {
                     </div>
 
                     <div className="match-row">
-                      <span className="match-label">일치 역량</span>
-                      {bid.matched.map((item) => (
-                        <span key={item}>✓ {item}</span>
-                      ))}
+                      <div className="match-group">
+                        <span className="match-label">일치역량</span>
+                        {bid.matched.length > 0 ? (
+                          bid.matched.map((item) => (
+                            <span key={item}>✓ {item}</span>
+                          ))
+                        ) : (
+                          <span>일치역량 없음</span>
+                        )}
+                      </div>
+                      {(bid.matchedConditions ?? []).length > 0 && (
+                        <div className="match-group search-condition-group">
+                          <span className="match-label">검색조건</span>
+                          {(bid.matchedConditions ?? []).map((item) => (
+                            <span key={item}>✓ {item}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="bid-deadline">
@@ -1216,7 +1702,7 @@ export default function Home() {
                 <strong>{noticeDetail.demandAgency}</strong>
               </div>
               <div>
-                <span>추정금액</span>
+                <span>사업금액</span>
                 <strong>{noticeDetail.budgetLabel}</strong>
               </div>
               <div>
@@ -1336,7 +1822,7 @@ export default function Home() {
 
             <div className="drawer-grid">
               <div>
-                <span>추정금액</span>
+                <span>사업금액</span>
                 <strong>{selected.budgetLabel}</strong>
               </div>
               <div>
@@ -1367,6 +1853,20 @@ export default function Home() {
                 ))}
               </div>
             </section>
+
+            {(selected.matchedConditions ?? []).length > 0 && (
+              <section className="analysis-section">
+                <h3>
+                  <span className="dot navy" />
+                  일치하는 검색조건
+                </h3>
+                <ul>
+                  {(selected.matchedConditions ?? []).map((item) => (
+                    <li key={item}>✓ {item}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             <section className="analysis-section">
               <h3>
@@ -1565,31 +2065,158 @@ export default function Home() {
                 <span style={{ width: `${companyProfile.completion}%` }} />
               </div>
             </div>
-            <dl>
-              <div>
-                <dt>소재지</dt>
-                <dd>{companyProfile.location}</dd>
+            <form className="profile-form" onSubmit={saveCompanyProfile}>
+              <div className="profile-field">
+                <label htmlFor="profile-name">기업명</label>
+                <input
+                  id="profile-name"
+                  value={profileDraft.name}
+                  maxLength={120}
+                  required
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    name: event.target.value,
+                  })}
+                />
               </div>
-              <div>
-                <dt>기업규모</dt>
-                <dd>{companyProfile.size}</dd>
+              <div className="profile-field">
+                <label htmlFor="profile-location">소재지</label>
+                <input
+                  id="profile-location"
+                  value={profileDraft.location}
+                  maxLength={120}
+                  placeholder="예: 경기도 성남시"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    location: event.target.value,
+                  })}
+                />
               </div>
-              <div>
-                <dt>보유면허</dt>
-                <dd>{companyProfile.licenses.join(" · ")}</dd>
+              <div className="profile-field">
+                <label htmlFor="profile-size">기업 규모</label>
+                <select
+                  id="profile-size"
+                  value={profileDraft.size}
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    size: event.target.value,
+                  })}
+                >
+                  <option value="소상공인">소상공인</option>
+                  <option value="중소기업">중소기업</option>
+                  <option value="중견기업">중견기업</option>
+                  <option value="대기업">대기업</option>
+                  <option value="비영리기관">비영리기관</option>
+                </select>
               </div>
-              <div>
-                <dt>핵심기술</dt>
-                <dd>{companyProfile.technologies.join(" · ")}</dd>
+              <div className="profile-field">
+                <label htmlFor="profile-budget">선호 최대 사업금액</label>
+                <div className="profile-budget-input">
+                  <input
+                    id="profile-budget"
+                    type="number"
+                    min="0"
+                    max="1000000"
+                    step="0.1"
+                    value={profileDraft.preferredMaxBudget}
+                    placeholder="예: 5"
+                    onChange={(event) => setProfileDraft({
+                      ...profileDraft,
+                      preferredMaxBudget: event.target.value,
+                    })}
+                  />
+                  <span>억원</span>
+                </div>
               </div>
-            </dl>
-            <button
-              className="primary-action full"
-              type="button"
-              onClick={() => setProfileOpen(false)}
-            >
-              기업 정보 관리
-            </button>
+              <div className="profile-field profile-field-wide">
+                <label htmlFor="profile-licenses">보유 면허·자격</label>
+                <textarea
+                  id="profile-licenses"
+                  value={profileDraft.licenses}
+                  placeholder="쉼표로 구분: 소프트웨어사업자, 정보통신공사업"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    licenses: event.target.value,
+                  })}
+                />
+              </div>
+              <div className="profile-field profile-field-wide">
+                <label htmlFor="profile-technologies">보유 기술</label>
+                <textarea
+                  id="profile-technologies"
+                  value={profileDraft.technologies}
+                  placeholder="쉼표로 구분: 생성형 AI, Java, React, Python"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    technologies: event.target.value,
+                  })}
+                />
+              </div>
+              <div className="profile-field profile-field-wide">
+                <label htmlFor="profile-business-areas">주요 사업 분야</label>
+                <textarea
+                  id="profile-business-areas"
+                  value={profileDraft.businessAreas}
+                  placeholder="쉼표로 구분: 공공 SI, AI 웹서비스 구축"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    businessAreas: event.target.value,
+                  })}
+                />
+              </div>
+              <div className="profile-field profile-field-wide">
+                <label htmlFor="profile-experiences">유사 수행실적</label>
+                <textarea
+                  id="profile-experiences"
+                  value={profileDraft.experiences}
+                  placeholder="쉼표로 구분: 공공 데이터 플랫폼 구축, 학교 정보시스템 운영"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    experiences: event.target.value,
+                  })}
+                />
+              </div>
+              <div className="profile-field profile-field-wide">
+                <label htmlFor="profile-service-regions">수행 가능 지역</label>
+                <input
+                  id="profile-service-regions"
+                  value={profileDraft.serviceRegions}
+                  placeholder="쉼표로 구분: 전국 또는 서울, 경기, 인천"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    serviceRegions: event.target.value,
+                  })}
+                />
+              </div>
+              <div className="profile-field profile-field-wide">
+                <label htmlFor="profile-excluded-areas">제외 사업 분야</label>
+                <input
+                  id="profile-excluded-areas"
+                  value={profileDraft.excludedBusinessAreas}
+                  placeholder="쉼표로 구분: 건축공사, 장비 단순납품"
+                  onChange={(event) => setProfileDraft({
+                    ...profileDraft,
+                    excludedBusinessAreas: event.target.value,
+                  })}
+                />
+              </div>
+              <p className="profile-form-help">
+                여러 항목은 쉼표로 구분하며, 저장된 정보는 이 브라우저에 보관되고
+                적합도와 참가 가능 여부 계산에 사용됩니다.
+              </p>
+              <div className="profile-form-actions">
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={restoreDefaultCompanyProfile}
+                >
+                  기본값 복원
+                </button>
+                <button className="primary-action" type="submit">
+                  프로필 저장 및 검색 반영
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       )}
@@ -1619,7 +2246,7 @@ export default function Home() {
           <span aria-hidden="true">≡</span>
           <small>필터</small>
         </button>
-        <button type="button" onClick={() => setProfileOpen(true)}>
+        <button type="button" onClick={openCompanyProfile}>
           <span aria-hidden="true">○</span>
           <small>프로필</small>
         </button>

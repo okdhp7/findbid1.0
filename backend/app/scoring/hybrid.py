@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from app.knowledge import analyze_query
+from app.knowledge.catalog import concept_variants
 from findbid_shared.schemas import SearchRequest
 
 
@@ -51,6 +53,17 @@ WEIGHTS = {
     "사업 금액": 0.06,
     "수행 준비도": 0.04,
     "신규 공고": 0.03,
+}
+MATCHABLE_KNOWLEDGE_DOMAINS = {
+    "품목·서비스",
+    "사업 분야",
+    "산업 분류",
+    "학교 유형",
+    "업종·면허",
+    "기술 분야",
+    "제품·기술명 별칭",
+    "구축·운영 행위",
+    "유사 수행실적",
 }
 
 
@@ -114,6 +127,70 @@ def _term_score(
     return round(len(matched) / len(unique_values) * 100), matched
 
 
+def _search_condition_values(request: SearchRequest) -> list[str]:
+    values: list[str] = []
+    sources = [
+        request.semantic_query,
+        *request.include_keywords,
+    ]
+    for source in sources:
+        if not source.strip():
+            continue
+        analysis = analyze_query(source)
+        normalized_source = source.lower()
+        source_values = [
+            (
+                normalized_source.find(entity.matched_text.lower()),
+                entity.canonical,
+            )
+            for entity in analysis.entities
+            if entity.domain in MATCHABLE_KNOWLEDGE_DOMAINS
+        ]
+        source_values.extend(
+            (
+                normalized_source.find(value.lower()),
+                value,
+            )
+            for value in analysis.free_text_terms
+        )
+        values.extend(
+            value
+            for _, value in sorted(
+                source_values,
+                key=lambda item: (
+                    item[0] if item[0] >= 0 else len(normalized_source),
+                    item[1],
+                ),
+            )
+        )
+
+    return list(
+        dict.fromkeys(
+            value.strip()
+            for value in values
+            if value.strip()
+        )
+    )
+
+
+def _search_condition_score(
+    corpus: str,
+    values: list[str],
+    neutral: int = 50,
+) -> tuple[int, list[str]]:
+    if not values:
+        return neutral, []
+    matched = [
+        value
+        for value in values
+        if any(
+            _matches(corpus, variant)
+            for variant in concept_variants(value)
+        )
+    ]
+    return round(len(matched) / len(values) * 100), matched
+
+
 def _region_key(value: str) -> str | None:
     normalized = _normalize(value)
     for key, aliases in REGION_ALIASES.items():
@@ -155,7 +232,14 @@ def calculate_hybrid_score(
     normalized_corpus = _normalize(corpus)
     licenses = [str(value) for value in company_profile.get("licenses", [])]
     technologies = [str(value) for value in company_profile.get("technologies", [])]
+    business_areas = [
+        str(value) for value in company_profile.get("business_areas", [])
+    ]
     experiences = [str(value) for value in company_profile.get("experiences", [])]
+    excluded_business_areas = [
+        str(value)
+        for value in company_profile.get("excluded_business_areas", [])
+    ]
 
     unresolved: list[str] = []
     qualification_parts: list[int] = []
@@ -197,33 +281,41 @@ def calculate_hybrid_score(
     else:
         qualification_parts.append(100)
 
+    excluded_matches = [
+        value
+        for value in excluded_business_areas
+        if _matches(normalized_corpus, value)
+    ]
+    if excluded_matches:
+        qualification_parts.append(0)
+        hard_failure = True
+        unresolved.append(
+            "제외 사업 분야 일치: " + ", ".join(excluded_matches)
+        )
+
     qualification_score = round(sum(qualification_parts) / len(qualification_parts))
 
-    matched_technologies = _concept_matches(normalized_corpus, technologies)
+    capability_values = [*technologies, *business_areas]
+    matched_technologies = _concept_matches(normalized_corpus, capability_values)
     technology_score = (
-        round(len(matched_technologies) / len(technologies) * 100)
-        if technologies
+        round(len(matched_technologies) / len(capability_values) * 100)
+        if capability_values
         else 50
     )
 
-    intent_values = [
-        *request.include_keywords,
-        *(
-            _tokens(request.semantic_query)
-            if request.semantic_query.strip()
-            else technologies
-        ),
-    ]
-    lexical_semantic_score, semantic_matches = _term_score(
-        normalized_corpus,
-        intent_values,
+    search_condition_values = _search_condition_values(request)
+    lexical_semantic_score, search_condition_matches = (
+        _search_condition_score(
+            normalized_corpus,
+            search_condition_values,
+        )
     )
     semantic_score = (
         max(0, min(100, semantic_similarity))
         if semantic_similarity is not None
         else lexical_semantic_score
     )
-    keyword_score, keyword_matches = _term_score(
+    keyword_score, _ = _term_score(
         normalized_corpus,
         list(request.include_keywords),
     )
@@ -303,16 +395,7 @@ def calculate_hybrid_score(
     )
     confidence = round(profile_completion * 0.65 + bid_completeness * 0.35)
 
-    matched = list(
-        dict.fromkeys(
-            [
-                *matched_technologies,
-                *keyword_matches,
-                *semantic_matches,
-                *matched_experiences,
-            ]
-        )
-    )
+    matched = search_condition_matches
     reasons: list[str] = []
     if eligibility == "참가 가능":
         reasons.append("현재 등록된 필수 참가자격을 충족합니다.")
@@ -324,9 +407,10 @@ def calculate_hybrid_score(
         reasons.append(
             f"보유 기술 {len(matched_technologies)}개가 공고 내용과 일치합니다."
         )
-    if semantic_matches:
+    if search_condition_matches:
         reasons.append(
-            f"검색 의도와 관련된 표현 {len(semantic_matches)}개가 확인되었습니다."
+            "검색조건과 일치하는 핵심 항목 "
+            f"{len(search_condition_matches)}개가 확인되었습니다."
         )
     if not experiences:
         reasons.append(

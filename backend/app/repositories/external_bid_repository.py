@@ -148,6 +148,80 @@ class ExternalBidRepository:
         return list(dict.fromkeys(words))
 
     @staticmethod
+    def _matched_search_conditions(
+        row: dict[str, Any],
+        request: SearchRequest,
+    ) -> list[str]:
+        analysis = analyze_query(request.semantic_query)
+        demand_agency = str(
+            row.get("agency_name") or row.get("noticer_name") or ""
+        ).lower()
+        contract_method = str(row.get("contract_method") or "").lower()
+        matched_conditions = [
+            f"수요기관: {agency}"
+            for agency in analysis.demand_agencies
+            if agency.lower() in demand_agency
+        ]
+        matched_conditions.extend(
+            f"계약방법: {method}"
+            for method in analysis.contract_methods
+            if method.lower() in contract_method
+        )
+        min_budget = (
+            analysis.min_budget
+            if analysis.min_budget is not None
+            else request.min_budget
+            if request.min_budget is not None and request.min_budget > 0
+            else None
+        )
+        max_budget = (
+            analysis.max_budget
+            if analysis.max_budget is not None
+            else request.max_budget
+            if request.max_budget is not None and request.max_budget > 0
+            else None
+        )
+        min_operator = (
+            "이상"
+            if (
+                analysis.min_budget_inclusive
+                if analysis.min_budget is not None
+                else True
+            )
+            else "초과"
+        )
+        max_operator = (
+            "이하"
+            if (
+                analysis.max_budget_inclusive
+                if analysis.max_budget is not None
+                else True
+            )
+            else "미만"
+        )
+        if min_budget is not None and max_budget is not None:
+            matched_conditions.append(
+                "사업금액: "
+                f"{ExternalBidRepository._budget_label(min_budget)} "
+                f"{min_operator} ~ "
+                f"{ExternalBidRepository._budget_label(max_budget)} "
+                f"{max_operator}"
+            )
+        elif min_budget is not None:
+            matched_conditions.append(
+                "사업금액: "
+                f"{ExternalBidRepository._budget_label(min_budget)} "
+                f"{min_operator}"
+            )
+        elif max_budget is not None:
+            matched_conditions.append(
+                "사업금액: "
+                f"{ExternalBidRepository._budget_label(max_budget)} "
+                f"{max_operator}"
+            )
+        return matched_conditions
+
+    @staticmethod
     def _document_text(row: dict[str, Any]) -> str:
         values = [
             str(row.get(key) or "")
@@ -234,6 +308,14 @@ class ExternalBidRepository:
             vectors.update(zip(missing_ids, missing_vectors, strict=True))
 
         return engine.score_vector(query_vector, vectors)
+
+    @staticmethod
+    def _semantic_ranking_enabled(request: SearchRequest) -> bool:
+        return (
+            bool(request.semantic_query.strip())
+            and bool(analyze_query(request.semantic_query).anchor_terms)
+            and get_semantic_search_engine().enabled
+        )
 
     @classmethod
     def _prioritize_semantic_rows(
@@ -346,6 +428,11 @@ class ExternalBidRepository:
             <= 7
         )
         days_left = self._days_left(row.get("deadline"))
+        company_profile = (
+            request.company_profile.model_dump(by_alias=False)
+            if request.company_profile is not None
+            else COMPANY_PROFILE
+        )
         hybrid_score = calculate_hybrid_score(
             corpus=corpus,
             budget=budget,
@@ -358,7 +445,7 @@ class ExternalBidRepository:
             region_restriction=str(row.get("region_restriction") or ""),
             sme_only=bool(row.get("sme_only")),
             request=request,
-            company_profile=COMPANY_PROFILE,
+            company_profile=company_profile,
             semantic_similarity=semantic_similarity,
         )
 
@@ -389,6 +476,10 @@ class ExternalBidRepository:
                 "eligibility": hybrid_score.eligibility,
                 "summary": (row.get("description") or "")[:1000],
                 "matched": hybrid_score.matched,
+                "matched_conditions": self._matched_search_conditions(
+                    row,
+                    request,
+                ),
                 "requirements": requirements,
                 "risks": hybrid_score.unresolved_requirements,
                 "tags": tags,
@@ -456,15 +547,26 @@ class ExternalBidRepository:
         params: dict[str, Any] = {}
         order_by = "b.announce_date DESC NULLS LAST, b.id DESC"
 
-        category = (
+        category = analysis.category or (
             request.category
             if request.category and request.category != "전체"
-            else analysis.category
+            else None
         )
         if category:
             conditions.append("b.category = :category")
             params["category"] = category
-        if request.region and request.region != "전체 지역":
+        if analysis.participant_regions:
+            region_conditions = ["b.region_name IS NULL"]
+            for region_index, region in enumerate(analysis.participant_regions):
+                prefixes = REGION_PREFIXES.get(region, (region,))
+                for prefix_index, prefix in enumerate(prefixes):
+                    name = (
+                        f"intent_region_{region_index}_{prefix_index}"
+                    )
+                    region_conditions.append(f"b.region_name LIKE :{name}")
+                    params[name] = f"{prefix}%"
+            conditions.append(f"({' OR '.join(region_conditions)})")
+        elif request.region and request.region != "전체 지역":
             region_conditions = ["b.region_name IS NULL"]
             prefixes = REGION_PREFIXES.get(request.region, (request.region,))
             for index, prefix in enumerate(prefixes):
@@ -476,23 +578,20 @@ class ExternalBidRepository:
                 "CASE WHEN b.region_name IS NULL THEN 1 ELSE 0 END, "
                 + order_by
             )
-        elif analysis.participant_regions:
-            region_conditions = ["b.region_name IS NULL"]
-            for region_index, region in enumerate(analysis.participant_regions):
-                prefixes = REGION_PREFIXES.get(region, (region,))
-                for prefix_index, prefix in enumerate(prefixes):
-                    name = (
-                        f"intent_region_{region_index}_{prefix_index}"
-                    )
-                    region_conditions.append(f"b.region_name LIKE :{name}")
-                    params[name] = f"{prefix}%"
-            conditions.append(f"({' OR '.join(region_conditions)})")
 
-        min_budget = request.min_budget or analysis.min_budget
+        min_budget = (
+            analysis.min_budget
+            if analysis.min_budget is not None
+            else request.min_budget
+        )
         if min_budget:
             min_operator = (
                 ">="
-                if request.min_budget or analysis.min_budget_inclusive
+                if (
+                    analysis.min_budget_inclusive
+                    if analysis.min_budget is not None
+                    else True
+                )
                 else ">"
             )
             conditions.append(
@@ -502,11 +601,19 @@ class ExternalBidRepository:
             )
             params["min_budget"] = min_budget
 
-        max_budget = request.max_budget or analysis.max_budget
+        max_budget = (
+            analysis.max_budget
+            if analysis.max_budget is not None
+            else request.max_budget
+        )
         if max_budget:
             max_operator = (
                 "<="
-                if request.max_budget or analysis.max_budget_inclusive
+                if (
+                    analysis.max_budget_inclusive
+                    if analysis.max_budget is not None
+                    else True
+                )
                 else "<"
             )
             conditions.append(
@@ -516,14 +623,37 @@ class ExternalBidRepository:
             )
             params["max_budget"] = max_budget
         closing_days = (
-            request.closing_within_days
-            or analysis.closing_within_days
+            analysis.closing_within_days
+            if analysis.closing_within_days is not None
+            else request.closing_within_days
         )
         if closing_days:
             conditions.append(
                 "b.deadline <= now() + make_interval(days => :closing_days)"
             )
             params["closing_days"] = closing_days
+
+        if analysis.demand_agencies:
+            agency_conditions: list[str] = []
+            for index, agency in enumerate(analysis.demand_agencies):
+                name = f"demand_agency_{index}"
+                agency_conditions.append(
+                    f"lower(coalesce(b.agency_name, '')) LIKE :{name}"
+                )
+                params[name] = f"%{agency.lower()}%"
+            conditions.append(f"({' OR '.join(agency_conditions)})")
+
+        if analysis.contract_methods:
+            contract_conditions: list[str] = []
+            for index, contract_method in enumerate(
+                analysis.contract_methods
+            ):
+                name = f"contract_method_{index}"
+                contract_conditions.append(
+                    f"lower(coalesce(b.contract_method, '')) LIKE :{name}"
+                )
+                params[name] = f"%{contract_method.lower()}%"
+            conditions.append(f"({' OR '.join(contract_conditions)})")
 
         includes = self._keyword_list(request)
         excludes = list(
@@ -556,10 +686,7 @@ class ExternalBidRepository:
     def _ranked_records(self, request: SearchRequest) -> list[BidRecord]:
         self.last_search_trace = []
         conditions, params, order_by = self._search_parts(request)
-        semantic_enabled = (
-            bool(request.semantic_query.strip())
-            and get_semantic_search_engine().enabled
-        )
+        semantic_enabled = self._semantic_ranking_enabled(request)
         limit_clause = ""
         if semantic_enabled:
             limit_clause = "LIMIT :semantic_candidate_limit"
@@ -582,7 +709,11 @@ class ExternalBidRepository:
         self.last_search_trace.append(
             f"DB 조건 적용 후보: {len(rows):,}건"
         )
-        semantic_scores = self._semantic_scores(rows, request.semantic_query)
+        semantic_scores = (
+            self._semantic_scores(rows, request.semantic_query)
+            if semantic_enabled
+            else {}
+        )
         if semantic_enabled:
             self.last_search_trace.append(
                 f"임베딩 유사도 통과: {len(semantic_scores):,}건"
@@ -655,6 +786,12 @@ class ExternalBidRepository:
         self,
         request: SearchRequest,
     ) -> tuple[list[BidRecord], int, int, int, int]:
+        analysis = analyze_query(request.semantic_query)
+        closing_within_days = (
+            analysis.closing_within_days
+            if analysis.closing_within_days is not None
+            else request.closing_within_days
+        )
         base_request = request.model_copy(
             update={
                 "only_eligible": False,
@@ -667,7 +804,7 @@ class ExternalBidRepository:
         records = [
             record
             for record in base_records
-            if self._closes_within(record, request.closing_within_days)
+            if self._closes_within(record, closing_within_days)
             and (
                 not request.only_eligible
                 or record.eligibility == "참가 가능"
@@ -681,10 +818,10 @@ class ExternalBidRepository:
         )
         eligible_total = sum(
             record.eligibility == "참가 가능"
-            and self._closes_within(record, request.closing_within_days)
+            and self._closes_within(record, closing_within_days)
             for record in base_records
         )
-        closing_days = min(request.closing_within_days or 7, 7)
+        closing_days = min(closing_within_days or 7, 7)
         closing_soon_total = sum(
             self._closes_within(record, closing_days)
             and (
@@ -707,10 +844,7 @@ class ExternalBidRepository:
         return records
 
     def count_search(self, request: SearchRequest) -> int:
-        semantic_enabled = (
-            bool(request.semantic_query.strip())
-            and get_semantic_search_engine().enabled
-        )
+        semantic_enabled = self._semantic_ranking_enabled(request)
         if request.only_eligible or semantic_enabled:
             return len(self._ranked_records(request))
         conditions, params, _ = self._search_parts(request)

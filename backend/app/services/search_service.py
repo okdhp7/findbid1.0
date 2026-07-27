@@ -75,6 +75,16 @@ class SearchService:
                     else "발주기관·수요기관 우선순위"
                 )
             )
+        if analysis.demand_agencies:
+            trace.append(
+                "수요기관 필터: "
+                + "·".join(analysis.demand_agencies)
+            )
+        if analysis.contract_methods:
+            trace.append(
+                "계약방법 필터: "
+                + "·".join(analysis.contract_methods)
+            )
 
         cache_hit = False
         if isinstance(self.repository, ExternalBidRepository):
@@ -172,12 +182,41 @@ class SearchService:
         return SearchResponse(
             query_plan=QueryPlan(
                 hard_filters={
-                    "category": request.category or "전체",
-                    "region": request.region or "전체 지역",
-                    "minBudget": request.min_budget,
-                    "maxBudget": request.max_budget,
+                    "category": (
+                        analysis.category
+                        or request.category
+                        or "전체"
+                    ),
+                    "region": (
+                        "·".join(analysis.participant_regions)
+                        if analysis.participant_regions
+                        else request.region
+                        or "전체 지역"
+                    ),
+                    "minBudget": (
+                        analysis.min_budget
+                        if analysis.min_budget is not None
+                        else request.min_budget
+                        if request.min_budget is not None
+                        and request.min_budget > 0
+                        else None
+                    ),
+                    "maxBudget": (
+                        analysis.max_budget
+                        if analysis.max_budget is not None
+                        else request.max_budget
+                        if request.max_budget is not None
+                        and request.max_budget > 0
+                        else None
+                    ),
                     "onlyEligible": request.only_eligible,
-                    "closingWithinDays": request.closing_within_days,
+                    "closingWithinDays": (
+                        analysis.closing_within_days
+                        if analysis.closing_within_days is not None
+                        else request.closing_within_days
+                    ),
+                    "demandAgencies": analysis.demand_agencies,
+                    "contractMethods": analysis.contract_methods,
                 },
                 keywords={
                     "include": request.include_keywords,

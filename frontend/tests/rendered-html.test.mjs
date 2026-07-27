@@ -62,16 +62,40 @@ test("공고 목록 상단과 하단 이동 기능을 제공한다", async () =>
   assert.match(css, /\.input-with-icon input:focus-visible\s*\{[\s\S]*?outline:\s*none/);
 });
 
-test("상세조건 변경 시 자동 검색하고 조건 적용 버튼을 유지한다", async () => {
+test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검색한다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
   assert.match(page, /new AbortController\(\)/);
   assert.match(page, /requestId !== searchRequestIdRef\.current/);
   assert.match(page, /scheduleDetailSearch\(/);
+  assert.match(page, /const detailSnapshot = \{ \.\.\.snapshot \}/);
+  assert.match(page, /prepareSemanticAnalysisState\(detailSnapshot\.semanticQuery\);[\s\S]*?runSearch\(detailSnapshot, 1\)/);
+  const prepareAnalysisBody = page.match(
+    /const prepareSemanticAnalysisState = \(nextSemanticQuery: string\) => \{([\s\S]*?)\n  \};/,
+  )?.[1] ?? "";
+  assert.doesNotMatch(prepareAnalysisBody, /setSemanticQuery\(/);
+  assert.match(prepareAnalysisBody, /setSemanticQueryActive\(Boolean\(nextSemanticQuery\.trim\(\)\)\)/);
+  assert.match(page, /입력 문장은 아직 검색에 적용되지 않았습니다/);
+  assert.doesNotMatch(page, /상세조건 검색에는 적용되지 않았습니다/);
+  assert.match(page, /searchRequestIdRef\.current \+= 1;[\s\S]*?searchAbortControllerRef\.current\?\.abort\(\)/);
   assert.match(page, /includeKeyword: nextKeyword[\s\S]*?500/);
   assert.match(page, /excludeKeyword: nextKeyword[\s\S]*?500/);
+  assert.match(page, /prepareSemanticAnalysisState\(resetSnapshot\.semanticQuery\)/);
   assert.match(page, /onClick=\{\(\) => \{ runSearchNow\(currentSearchSnapshot\(\)\); setFiltersOpen\(false\); \}\}/);
   assert.match(page, /조건 적용하기/);
+  assert.match(page, /\/\*[\s\S]*?조건 적용하기[\s\S]*?\*\//);
+  assert.match(page, /className="apply-button"[\s\S]*?onClick=\{openSaveSearch\}[\s\S]*?검색조건 저장/);
+  assert.doesNotMatch(page, /className="save-search"/);
+});
+
+test("서버가 적용한 AI 우선 조건을 프런트엔드에서 다시 상세조건으로 제한하지 않는다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const filteredBody = page.match(
+    /const filteredBids = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[resultBids, sort\]\);/,
+  )?.[1] ?? "";
+
+  assert.match(filteredBody, /\[\.\.\.resultBids\]\.sort/);
+  assert.doesNotMatch(filteredBody, /\.filter\(/);
 });
 
 test("저장한 검색조건에 키워드와 선택 조건을 표시한다", async () => {
@@ -81,6 +105,9 @@ test("저장한 검색조건에 키워드와 선택 조건을 표시한다", asy
   ]);
 
   assert.match(page, /\.\.\.DEFAULT_SEARCH,[\s\S]*?\.\.\.savedSearch\.filters/);
+  assert.match(page, /filters: \{[\s\S]*?\.\.\.currentSearchSnapshot\(\),[\s\S]*?semanticQuery: ""/);
+  assert.match(page, /const snapshot = \{[\s\S]*?\.\.\.savedSearch\.filters,[\s\S]*?semanticQuery,/);
+  assert.match(page, /setExcludeKeyword\(snapshot\.excludeKeyword\);[\s\S]*?prepareSemanticAnalysisState\(snapshot\.semanticQuery\)/);
   assert.match(page, /className="saved-search-item-conditions"/);
   assert.match(page, /savedSearch\.filters\.includeKeyword\.trim\(\)/);
   assert.match(page, /포함: \{savedSearch\.filters\.includeKeyword\}/);
@@ -121,6 +148,63 @@ test("AI 시맨틱 검색 입력창에서 Enter 키로 검색한다", async () =
   assert.match(searchLabelStyle, /line-height:\s*1/);
 });
 
+test("AI 시맨틱 검색어를 최대 10개 저장하고 선택 및 삭제할 수 있다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const SEMANTIC_HISTORY_KEY = "findbid\.semantic-history\.v1"/);
+  assert.match(page, /const SEMANTIC_HISTORY_LIMIT = 10/);
+  assert.match(page, /const \[semanticHistory, setSemanticHistory\] = useState<string\[\]>\(\[\]\)/);
+  assert.match(page, /window\.localStorage\.getItem\(SEMANTIC_HISTORY_KEY\)/);
+  assert.match(page, /const restoredHistory = parsed[\s\S]*?setSemanticHistory\(restoredHistory\)/);
+  assert.match(page, /\.slice\(0, SEMANTIC_HISTORY_LIMIT\)/);
+  assert.match(page, /const rememberSemanticQuery = \(query: string\) =>/);
+  assert.match(page, /toLocaleLowerCase\("ko-KR"\)/);
+  assert.match(page, /window\.localStorage\.setItem\(SEMANTIC_HISTORY_KEY, JSON\.stringify\(next\)\)/);
+  assert.match(page, /runSemanticSearchNow\(\{/);
+  assert.match(page, /runSemanticSearchNow\(currentSearchSnapshot\(\)\)/);
+  assert.match(page, /const selectSemanticHistory = \(query: string\) =>/);
+  assert.match(page, /const deleteSemanticHistory = \(query: string\) =>/);
+  assert.match(page, /const clearSemanticHistory = \(\) =>/);
+  assert.match(page, /window\.localStorage\.removeItem\(SEMANTIC_HISTORY_KEY\)/);
+  assert.match(page, /최근 검색어/);
+  assert.match(page, /저장된 AI 검색어/);
+  assert.match(page, /전체 삭제/);
+  assert.match(page, /aria-label=\{`‘\$\{query\}’ 검색어 삭제`\}/);
+  assert.match(css, /\.app-shell \.semantic-history-panel/);
+  assert.match(css, /\.app-shell \.semantic-history-select/);
+  assert.match(css, /\.app-shell \.semantic-history-delete/);
+});
+
+test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영한다", async () => {
+  const [page, bids, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/bids.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const COMPANY_PROFILE_KEY = "findbid\.company-profile\.v1"/);
+  assert.match(page, /window\.localStorage\.getItem\(COMPANY_PROFILE_KEY\)/);
+  assert.match(page, /window\.localStorage\.setItem\(COMPANY_PROFILE_KEY, JSON\.stringify\(nextProfile\)\)/);
+  assert.match(page, /companyProfile: companyProfileRef\.current/);
+  assert.match(page, /const saveCompanyProfile = \(event: React\.FormEvent<HTMLFormElement>\) =>/);
+  assert.match(page, /companyProfileRef\.current = nextProfile/);
+  assert.match(page, /runSearchNow\(currentSearchSnapshot\(\)\)/);
+  assert.match(page, /className="profile-form"/);
+  assert.match(page, /프로필 저장 및 검색 반영/);
+  assert.match(page, /보유 면허·자격/);
+  assert.match(page, /주요 사업 분야/);
+  assert.match(page, /유사 수행실적/);
+  assert.match(page, /수행 가능 지역/);
+  assert.match(page, /제외 사업 분야/);
+  assert.match(bids, /export type CompanyProfile/);
+  assert.match(css, /\.app-shell \.profile-form/);
+  assert.match(css, /\.app-shell \.profile-field/);
+  assert.match(css, /\.app-shell \.profile-form-actions/);
+});
+
 test("검색 과정과 처리시간을 펼쳐서 확인할 수 있다", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -144,7 +228,9 @@ test("공고 제목 상세정보와 AI 상세 분석을 서로 다른 창으로 
   ]);
 
   assert.match(page, /const \[noticeDetail, setNoticeDetail\]/);
-  assert.match(page, /className="bid-title"[\s\S]*?onClick=\{\(\) => setNoticeDetail\(bid\)\}/);
+  assert.match(page, /function BidTitle/);
+  assert.match(page, /onClick=\{onOpen\}/);
+  assert.match(page, /onOpen=\{\(\) => setNoticeDetail\(bid\)\}/);
   assert.match(page, /aria-label=\{`\$\{bid\.title\} AI 상세 분석`\}/);
   assert.match(page, /aria-label="입찰공고 상세정보"/);
   assert.match(page, /aria-label="AI 입찰공고 상세 분석"/);
@@ -197,7 +283,10 @@ test("참가 가능 및 7일 내 마감 개수를 검색 API 응답으로 표시
   assert.match(page, /setClosingSoonTotal\(data\.closingSoonTotal\)/);
   assert.match(page, /\{eligibleTotal\.toLocaleString\("ko-KR"\)\}/);
   assert.match(page, /\{closingSoonTotal\.toLocaleString\("ko-KR"\)\}/);
-  assert.equal((page.match(/>조건 기준<\/span>/g) ?? []).length, 3);
+  assert.match(page, /<small>전체 공고<\/small>/);
+  assert.match(page, /<small>참가 가능<\/small>/);
+  assert.match(page, /<small>평균 적합도<\/small>/);
+  assert.match(page, /<small>7일 내 마감<\/small>/);
   assert.doesNotMatch(page, /현재 조건 기준/);
   assert.doesNotMatch(page, /<strong>38<em>건<\/em><\/strong>/);
   assert.doesNotMatch(page, /<strong>12<em>건<\/em><\/strong>/);
@@ -219,4 +308,104 @@ test("프로필 기반 적합도와 신뢰도 및 산정 근거를 표시한다"
   assert.doesNotMatch(page, /<strong>87<em>점<\/em><\/strong>/);
   assert.match(css, /\.app-shell \.score-breakdown/);
   assert.match(css, /\.app-shell \.score-confidence/);
+});
+
+test("공고 카드에 일치 역량과 속성 검색조건을 구분해 표시한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /bid\.matched\.length > 0/);
+  assert.match(page, /bid\.matched\.map\(\(item\) =>/);
+  assert.match(page, /bid\.matchedConditions \?\? \[\]/);
+  assert.match(page, /\(bid\.matchedConditions \?\? \[\]\)\.map\(\(item\) =>/);
+  assert.match(page, /검색조건/);
+  assert.match(page, /일치하는 검색조건/);
+  assert.match(page, />✓ \{item\}</);
+  const matchedItemStyle = css.match(
+    /\.app-shell \.match-group span:not\(\.match-label\)\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const matchedLabelStyle = css.match(
+    /\.app-shell \.match-label\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  assert.match(matchedLabelStyle, /color:\s*var\(--accent\)/);
+  assert.match(matchedLabelStyle, /font-weight:\s*400/);
+  assert.match(matchedItemStyle, /background:\s*transparent/);
+  assert.match(matchedItemStyle, /border:\s*0/);
+  assert.match(matchedItemStyle, /color:\s*var\(--accent\)/);
+  assert.match(matchedItemStyle, /font-size:\s*11px/);
+  assert.match(matchedItemStyle, /font-weight:\s*600/);
+  assert.match(matchedItemStyle, /padding:\s*0/);
+});
+
+test("긴 수요기관명은 두 줄 말줄임과 접근 가능한 툴팁으로 표시한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /function AgencyName/);
+  assert.match(page, /trigger\.scrollHeight > trigger\.clientHeight/);
+  assert.match(page, /new ResizeObserver\(measure\)/);
+  assert.match(page, /isTruncated \? " is-truncated" : ""/);
+  assert.match(page, /aria-describedby=\{isTruncated \? tooltipId : undefined\}/);
+  assert.match(page, /className="agency-tooltip-content"/);
+  assert.match(page, /role="tooltip"/);
+  assert.match(page, /<AgencyName bidId=\{bid\.id\} name=\{bid\.demandAgency\} \/>/);
+  assert.match(css, /-webkit-line-clamp:\s*2/);
+  assert.match(css, /\.agency-tooltip-trigger\.is-truncated/);
+  assert.match(css, /\.agency-tooltip:hover \.agency-tooltip-content/);
+  assert.match(css, /\.agency-tooltip:focus-within \.agency-tooltip-content/);
+});
+
+test("잘린 공고 제목은 기존 상세 클릭과 조건부 툴팁을 함께 제공한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /function BidTitle/);
+  assert.match(page, /trigger\.scrollWidth > trigger\.clientWidth/);
+  assert.match(page, /className="bid-title-tooltip-content"/);
+  assert.match(page, /aria-describedby=\{isTruncated \? tooltipId : undefined\}/);
+  assert.match(page, /<BidTitle/);
+  assert.match(page, /onOpen=\{\(\) => setNoticeDetail\(bid\)\}/);
+  assert.match(css, /\.bid-title\.is-truncated/);
+  assert.match(css, /\.bid-title-tooltip:hover \.bid-title-tooltip-content/);
+  assert.match(css, /\.bid-title-tooltip:focus-within \.bid-title-tooltip-content/);
+});
+
+test("금액 항목 명칭은 사업금액으로 통일한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.equal((page.match(/>사업금액<\/(?:span|label)>/g) ?? []).length, 4);
+  assert.doesNotMatch(page, /추정금액/);
+});
+
+test("요약 카드의 값과 단위는 축소된 글자 크기를 사용한다", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const valueStyle = css.match(
+    /\.app-shell \.metrics strong\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const unitStyle = css.match(
+    /\.app-shell \.metrics strong em\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+
+  assert.match(valueStyle, /font-size:\s*22px/);
+  assert.match(unitStyle, /font-size:\s*11px/);
+  assert.match(css, /@media[\s\S]*?\.app-shell \.metrics strong\s*\{[\s\S]*?font-size:\s*20px/);
+});
+
+test("FindBid 로고는 입찰정보 검색을 상징하는 고급형 SVG 워드마크를 사용한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /id="findbid-logo-gradient"/);
+  assert.match(page, /className="logo-bid-mark"[^>]*>Bid<\/text>/);
+  assert.match(page, /className="logo-lens"/);
+  assert.match(page, /className="logo-lens-handle"/);
+  assert.match(page, /className="word-find">Find/);
+  assert.match(page, /className="word-bid">Bid/);
+  assert.match(page, /AI Bid Searcher/);
+  assert.doesNotMatch(page, /<span className="logo-symbol">F<\/span>/);
+  assert.doesNotMatch(page, /className="logo-f"/);
+  assert.doesNotMatch(page, /className="logo-gavel"/);
+  assert.match(css, /\.app-shell \.logo-bid-mark/);
+  assert.match(css, /\.app-shell \.word-bid/);
+  assert.match(css, /background-clip:\s*text/);
 });

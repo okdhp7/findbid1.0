@@ -175,23 +175,61 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   color: var(--text);
   display: flex;
-  font-family: "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
-  gap: 12px;
+  font-family: "Avenir Next", "Pretendard Variable", "SUIT Variable", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
+  gap: 11px;
 }
 
 .app-shell .logo-symbol {
   align-items: center;
-  background: linear-gradient(145deg, var(--accent-light), var(--accent-deep));
-  border-radius: 11px;
-  box-shadow: 0 6px 18px var(--accent-glow);
-  color: white;
   display: flex;
-  font-size: 17px;
-  font-weight: 800;
-  height: 38px;
+  filter: drop-shadow(0 7px 12px var(--accent-glow));
+  height: 40px;
   justify-content: center;
   position: relative;
-  width: 38px;
+  width: 40px;
+}
+
+.app-shell .logo-symbol svg {
+  display: block;
+  height: 40px;
+  overflow: visible;
+  width: 40px;
+}
+
+.app-shell .logo-tile {
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16));
+}
+
+.app-shell .logo-tile-highlight {
+  fill: none;
+  opacity: 0.32;
+  stroke: white;
+  stroke-linecap: round;
+  stroke-width: 1.1;
+}
+
+.app-shell .logo-bid-mark {
+  fill: white;
+  font-family: "Avenir Next", "Pretendard Variable", "SUIT Variable", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.65px;
+}
+
+.app-shell .logo-lens {
+  stroke-width: 2;
+}
+
+.app-shell .logo-lens-handle {
+  fill: none;
+  stroke: #bcecff;
+  stroke-linecap: round;
+  stroke-width: 2.3;
+}
+
+.app-shell .logo-lens-glint {
+  fill: white;
+  opacity: 0.82;
 }
 
 .app-shell .logo-symbol::after {
@@ -209,27 +247,37 @@ a { color: inherit; text-decoration: none; }
 .app-shell .logo-copy {
   display: flex;
   flex-direction: column;
-  line-height: 1;
+  line-height: 0.95;
 }
 
 .app-shell .logo-copy strong {
-  color: var(--text);
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
+  align-items: baseline;
+  display: flex;
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.85px;
 }
 
-.app-shell .logo-copy strong span {
-  color: var(--accent-light);
+.app-shell .word-find {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.app-shell .word-bid {
+  background: linear-gradient(135deg, var(--accent-light), var(--accent-deep));
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  -webkit-background-clip: text;
 }
 
 .app-shell .logo-copy small {
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
-  margin-top: 5px;
-  text-transform: uppercase;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 1.25px;
+  margin-top: 6px;
+  text-transform: none;
 }
 
 /* Main Nav */
@@ -520,7 +568,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-panel), inset 0 1px 0 rgba(255,255,255,0.06);
   margin-top: 32px;
-  overflow: hidden;
+  overflow: visible;
   padding: 24px;
   position: relative;
   width: 100%;
@@ -572,7 +620,14 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
 }
 
-.app-shell .search-head > button {
+.app-shell .search-head-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  position: relative;
+}
+
+.app-shell .semantic-input-clear {
   background: transparent;
   border: 0;
   color: var(--muted);
@@ -580,8 +635,139 @@ a { color: inherit; text-decoration: none; }
   transition: color 0.15s;
 }
 
-.app-shell .search-head > button:hover {
+.app-shell .semantic-input-clear:hover {
   color: var(--text-soft);
+}
+
+.app-shell .semantic-history {
+  position: relative;
+}
+
+.app-shell .semantic-history-toggle {
+  align-items: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px 5px 10px;
+}
+
+.app-shell .semantic-history-toggle:hover,
+.app-shell .semantic-history-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+.app-shell .semantic-history-toggle span {
+  align-items: center;
+  background: rgba(79, 142, 247, 0.14);
+  border-radius: 999px;
+  color: var(--accent-light);
+  display: inline-flex;
+  font-size: 10px;
+  height: 19px;
+  justify-content: center;
+  min-width: 19px;
+  padding: 0 5px;
+}
+
+.app-shell .semantic-history-panel {
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(440px, calc(100vw - 48px));
+  z-index: 80;
+}
+
+.app-shell .semantic-history-head {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 4px 9px;
+}
+
+.app-shell .semantic-history-head strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-shell .semantic-history-head button {
+  background: transparent;
+  border: 0;
+  color: var(--red);
+  font-size: 11px;
+  padding: 3px 5px;
+}
+
+.app-shell .semantic-history-panel > p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+  padding: 22px 8px;
+  text-align: center;
+}
+
+.app-shell .semantic-history-panel ul {
+  display: grid;
+  gap: 3px;
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0;
+}
+
+.app-shell .semantic-history-panel li {
+  align-items: center;
+  border-radius: 8px;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px;
+}
+
+.app-shell .semantic-history-panel li:hover {
+  background: var(--panel-soft);
+}
+
+.app-shell .semantic-history-select {
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.45;
+  min-width: 0;
+  overflow: hidden;
+  padding: 7px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .semantic-history-delete {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 7px;
+}
+
+.app-shell .semantic-history-delete:hover {
+  color: var(--red);
 }
 
 .app-shell .semantic-input {
@@ -1211,7 +1397,7 @@ a { color: inherit; text-decoration: none; }
 .app-shell .metrics strong {
   color: var(--text);
   font-family: "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   margin-top: 4px;
 }
@@ -1219,7 +1405,7 @@ a { color: inherit; text-decoration: none; }
 .app-shell .metrics strong em {
   color: var(--muted);
   font-family: "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 500;
   margin-left: 3px;
@@ -1528,8 +1714,47 @@ a { color: inherit; text-decoration: none; }
   width: 100%;
 }
 
+.app-shell .bid-title-tooltip {
+  min-width: 0;
+  position: relative;
+}
+
+.app-shell .bid-title.is-truncated {
+  cursor: help;
+}
+
 .app-shell .bid-title:hover {
   color: var(--accent-light);
+}
+
+.app-shell .bid-title-tooltip-content {
+  background: var(--text);
+  border-radius: 6px;
+  bottom: calc(100% - 4px);
+  box-shadow: var(--shadow-md);
+  color: var(--panel);
+  font-size: 13px;
+  font-weight: 500;
+  left: 0;
+  line-height: 1.5;
+  max-width: min(520px, calc(100vw - 48px));
+  opacity: 0;
+  padding: 9px 11px;
+  pointer-events: none;
+  position: absolute;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  visibility: hidden;
+  white-space: normal;
+  width: max-content;
+  z-index: 21;
+}
+
+.app-shell .bid-title-tooltip:hover .bid-title-tooltip-content,
+.app-shell .bid-title-tooltip:focus-within .bid-title-tooltip-content {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
 }
 
 .app-shell .bid-summary {
@@ -1576,33 +1801,121 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 
+.app-shell .agency-tooltip {
+  min-width: 0;
+  position: relative;
+}
+
+.app-shell .agency-tooltip-trigger {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: default;
+  display: -webkit-box;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  max-height: 2.8em;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.app-shell .agency-tooltip-trigger.is-truncated {
+  cursor: help;
+}
+
+.app-shell .agency-tooltip-trigger:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-shell .bid-facts .agency-tooltip-content {
+  background: var(--text);
+  border-radius: 6px;
+  bottom: calc(100% + 8px);
+  box-shadow: var(--shadow-md);
+  color: var(--panel);
+  font-size: 12px;
+  font-weight: 500;
+  left: 0;
+  letter-spacing: 0;
+  line-height: 1.45;
+  margin: 0;
+  max-width: min(320px, calc(100vw - 48px));
+  opacity: 0;
+  padding: 8px 10px;
+  pointer-events: none;
+  position: absolute;
+  text-transform: none;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  visibility: hidden;
+  white-space: normal;
+  width: max-content;
+  z-index: 20;
+}
+
+.app-shell .agency-tooltip:hover .agency-tooltip-content,
+.app-shell .agency-tooltip:focus-within .agency-tooltip-content {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
 .app-shell .match-row {
   align-items: center;
   border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px 16px;
   margin-top: 14px;
   padding-top: 12px;
 }
 
+.app-shell .match-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app-shell .search-condition-group {
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+
 .app-shell .match-label {
-  color: var(--muted);
+  color: var(--accent);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.3px;
   margin-right: 2px;
   text-transform: uppercase;
 }
 
-.app-shell .match-row span:not(.match-label) {
-  background: var(--panel-soft);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 8px;
+.app-shell .match-group span:not(.match-label) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .app-shell .search-condition-group {
+    border-left: 0;
+    flex-basis: 100%;
+    padding-left: 0;
+  }
 }
 
 /* Bid Deadline */
@@ -2193,7 +2506,9 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-panel);
-  max-width: 500px;
+  max-height: calc(100dvh - 40px);
+  max-width: 760px;
+  overflow-y: auto;
   padding: 36px;
   position: relative;
   width: 100%;
@@ -2286,6 +2601,95 @@ a { color: inherit; text-decoration: none; }
 
 .app-shell .primary-action.full {
   margin-top: 20px;
+}
+
+.app-shell .profile-form {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell .profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-shell .profile-field-wide,
+.app-shell .profile-form-help,
+.app-shell .profile-form-actions {
+  grid-column: 1 / -1;
+}
+
+.app-shell .profile-field label {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-shell .profile-field input,
+.app-shell .profile-field select,
+.app-shell .profile-field textarea {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  min-height: 42px;
+  outline: none;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.app-shell .profile-field textarea {
+  line-height: 1.55;
+  min-height: 66px;
+  resize: vertical;
+}
+
+.app-shell .profile-field input:focus,
+.app-shell .profile-field select:focus,
+.app-shell .profile-field textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 142, 247, 0.1);
+}
+
+.app-shell .profile-budget-input {
+  align-items: center;
+  display: flex;
+  position: relative;
+}
+
+.app-shell .profile-budget-input input {
+  padding-right: 48px;
+}
+
+.app-shell .profile-budget-input span {
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+}
+
+.app-shell .profile-form-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 2px 0 0;
+}
+
+.app-shell .profile-form-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 0.8fr 1.4fr;
+  margin-top: 4px;
+}
+
+.app-shell .profile-form-actions button {
+  margin: 0;
 }
 
 /* ============================================================
@@ -2831,6 +3235,25 @@ a { color: inherit; text-decoration: none; }
     padding: 16px;
   }
 
+  .app-shell .search-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .app-shell .search-head-actions {
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .app-shell .semantic-history {
+    position: static;
+  }
+
+  .app-shell .semantic-history-panel {
+    width: min(440px, calc(100vw - 60px));
+  }
+
   .app-shell .semantic-input {
     align-items: stretch;
     flex-direction: column;
@@ -2883,7 +3306,7 @@ a { color: inherit; text-decoration: none; }
   }
 
   .app-shell .metrics strong {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .app-shell .result-toolbar h2 {
@@ -2998,9 +3421,23 @@ a { color: inherit; text-decoration: none; }
   .app-shell .profile-modal {
     border-radius: var(--radius-xl);
     margin: 12px;
-    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
     overflow-y: auto;
     padding: 24px;
+  }
+
+  .app-shell .profile-form {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell .profile-field-wide,
+  .app-shell .profile-form-help,
+  .app-shell .profile-form-actions {
+    grid-column: auto;
+  }
+
+  .app-shell .profile-form-actions {
+    grid-template-columns: 1fr;
   }
 
   .app-shell .saved-search-modal {
