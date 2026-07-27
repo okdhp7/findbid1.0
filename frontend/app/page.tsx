@@ -502,7 +502,7 @@ export default function Home() {
           <span className="logo-symbol">F</span>
           <span className="logo-copy">
             <strong>Find<span>Bid</span></strong>
-            <small>AI PROCUREMENT</small>
+            <small>AI BID SEARCHER</small>
           </span>
         </a>
 
