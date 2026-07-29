@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   companyProfile as DEFAULT_COMPANY_PROFILE,
   type Bid,
+  type BidAttachment,
   type CompanyProfile,
 } from "../lib/bids";
 
@@ -78,6 +79,8 @@ const SAVED_SEARCHES_KEY = "findbid.saved-searches.v1";
 const SEMANTIC_HISTORY_KEY = "findbid.semantic-history.v1";
 const SEMANTIC_HISTORY_LIMIT = 10;
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
+const SAVED_BIDS_KEY = "findbid.saved-bids.v1";
+const SAVED_BIDS_LIMIT = 50;
 
 type CompanyProfileDraft = {
   name: string;
@@ -88,7 +91,7 @@ type CompanyProfileDraft = {
   businessAreas: string;
   experiences: string;
   preferredMaxBudget: string;
-  serviceRegions: string;
+  serviceRegions: string[];
   excludedBusinessAreas: string;
 };
 
@@ -99,6 +102,87 @@ function normalizeProfileList(values: unknown): string[] {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 50);
+}
+
+function normalizeServiceRegions(values: unknown): string[] {
+  const normalized = Array.from(
+    new Set(
+      normalizeProfileList(values)
+        .map((value) => value === "전국" ? "전체 지역" : value)
+        .filter((value) => regions.includes(value)),
+    ),
+  );
+
+  return normalized.includes("전체 지역") ? ["전체 지역"] : normalized;
+}
+
+function normalizeSavedBid(value: unknown): Bid | null {
+  if (!value || typeof value !== "object") return null;
+  const bid = value as Partial<Bid>;
+  const id = typeof bid.id === "string" ? bid.id.trim() : "";
+  const title = typeof bid.title === "string" ? bid.title.trim() : "";
+  if (!id || !title) return null;
+
+  const category = ["용역", "물품", "공사"].includes(String(bid.category))
+    ? bid.category as Bid["category"]
+    : "용역";
+  const eligibility = ["참가 가능", "확인 필요", "참가 어려움"].includes(
+    String(bid.eligibility),
+  )
+    ? bid.eligibility as Bid["eligibility"]
+    : "확인 필요";
+
+  return {
+    id,
+    noticeNo: typeof bid.noticeNo === "string" && bid.noticeNo.trim()
+      ? bid.noticeNo.trim()
+      : id,
+    category,
+    title,
+    agency: typeof bid.agency === "string" ? bid.agency : "기관 미정",
+    demandAgency: typeof bid.demandAgency === "string" ? bid.demandAgency : "기관 미정",
+    region: typeof bid.region === "string" ? bid.region : "전국",
+    budget: Number.isFinite(Number(bid.budget)) ? Number(bid.budget) : 0,
+    budgetLabel: typeof bid.budgetLabel === "string" ? bid.budgetLabel : "금액 미정",
+    contractMethod: typeof bid.contractMethod === "string"
+      ? bid.contractMethod
+      : "확인 필요",
+    awardMethod: typeof bid.awardMethod === "string" ? bid.awardMethod : "확인 필요",
+    closeAt: typeof bid.closeAt === "string" ? bid.closeAt : "마감일 미정",
+    daysLeft: Number.isFinite(Number(bid.daysLeft)) ? Number(bid.daysLeft) : 0,
+    score: Number.isFinite(Number(bid.score)) ? Number(bid.score) : 0,
+    scoreConfidence: Number.isFinite(Number(bid.scoreConfidence))
+      ? Number(bid.scoreConfidence)
+      : 0,
+    scoreBreakdown: bid.scoreBreakdown && typeof bid.scoreBreakdown === "object"
+      ? bid.scoreBreakdown
+      : {},
+    scoreReasons: normalizeProfileList(bid.scoreReasons),
+    unresolvedRequirements: normalizeProfileList(bid.unresolvedRequirements),
+    eligibility,
+    summary: typeof bid.summary === "string" ? bid.summary : "",
+    matched: normalizeProfileList(bid.matched),
+    matchedConditions: normalizeProfileList(bid.matchedConditions),
+    requirements: normalizeProfileList(bid.requirements),
+    risks: normalizeProfileList(bid.risks),
+    tags: normalizeProfileList(bid.tags),
+    isNew: Boolean(bid.isNew),
+    sourceUrl: typeof bid.sourceUrl === "string"
+      && /^https?:\/\//i.test(bid.sourceUrl)
+      ? bid.sourceUrl
+      : null,
+    attachments: [],
+  };
+}
+
+function normalizeSavedBids(value: unknown): Bid[] {
+  if (!Array.isArray(value)) return [];
+  const uniqueBids = new Map<string, Bid>();
+  value.forEach((item) => {
+    const bid = normalizeSavedBid(item);
+    if (bid) uniqueBids.set(bid.id, bid);
+  });
+  return Array.from(uniqueBids.values()).slice(-SAVED_BIDS_LIMIT);
 }
 
 function normalizeCompanyProfile(value: unknown): CompanyProfile {
@@ -122,7 +206,7 @@ function normalizeCompanyProfile(value: unknown): CompanyProfile {
     preferredMaxBudget: Number.isFinite(preferredMaxBudget) && preferredMaxBudget > 0
       ? Math.round(preferredMaxBudget)
       : null,
-    serviceRegions: normalizeProfileList(profile.serviceRegions),
+    serviceRegions: normalizeServiceRegions(profile.serviceRegions),
     excludedBusinessAreas: normalizeProfileList(profile.excludedBusinessAreas),
     completion: typeof profile.completion === "number"
       ? Math.max(0, Math.min(100, Math.round(profile.completion)))
@@ -142,7 +226,7 @@ function profileToDraft(profile: CompanyProfile): CompanyProfileDraft {
     preferredMaxBudget: profile.preferredMaxBudget
       ? String(profile.preferredMaxBudget / 100_000_000)
       : "",
-    serviceRegions: profile.serviceRegions.join(", "),
+    serviceRegions: normalizeServiceRegions(profile.serviceRegions),
     excludedBusinessAreas: profile.excludedBusinessAreas.join(", "),
   };
 }
@@ -321,6 +405,132 @@ function OriginalNoticeAction({ bid }: { bid: Bid }) {
   );
 }
 
+const attachmentTypeOrder = [
+  "PDF",
+  "한글",
+  "엑셀",
+  "워드",
+  "파워포인트",
+  "이미지",
+  "압축파일",
+  "텍스트",
+  "바로가기",
+  "기타",
+];
+
+function attachmentTypeClass(fileType: string) {
+  return {
+    PDF: "pdf",
+    한글: "hwp",
+    엑셀: "excel",
+    워드: "word",
+    파워포인트: "powerpoint",
+    이미지: "image",
+    압축파일: "archive",
+    텍스트: "text",
+    바로가기: "link",
+  }[fileType] ?? "other";
+}
+
+function AttachmentDocuments({
+  attachments,
+  loading,
+  error,
+}: {
+  attachments: BidAttachment[];
+  loading: boolean;
+  error: string;
+}) {
+  if (loading) {
+    return (
+      <section className="notice-attachments" aria-busy="true">
+        <div className="notice-attachments-head">
+          <h3>첨부문서</h3>
+        </div>
+        <p className="attachment-state" role="status">
+          첨부문서를 불러오는 중입니다.
+        </p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="notice-attachments">
+        <div className="notice-attachments-head">
+          <h3>첨부문서</h3>
+        </div>
+        <p className="attachment-state attachment-error">{error}</p>
+      </section>
+    );
+  }
+
+  if (attachments.length === 0) {
+    return (
+      <section className="notice-attachments">
+        <div className="notice-attachments-head">
+          <h3>첨부문서</h3>
+          <span>0건</span>
+        </div>
+        <p className="attachment-state">등록된 첨부문서가 없습니다.</p>
+      </section>
+    );
+  }
+
+  const grouped = attachmentTypeOrder
+    .map((fileType) => ({
+      fileType,
+      items: attachments.filter((attachment) => attachment.fileType === fileType),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  return (
+    <section className="notice-attachments">
+      <div className="notice-attachments-head">
+        <h3>첨부문서</h3>
+        <span>{attachments.length}건</span>
+      </div>
+      <div className="attachment-groups">
+        {grouped.map((group) => (
+          <div className="attachment-group" key={group.fileType}>
+            <h4>{group.fileType} 문서 <span>{group.items.length}</span></h4>
+            <div className="attachment-list">
+              {group.items.map((attachment) => (
+                <a
+                  key={attachment.url}
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${attachment.name} 열기`}
+                  title={attachment.name}
+                >
+                  <span
+                    className={`attachment-icon attachment-${attachmentTypeClass(attachment.fileType)}`}
+                    aria-hidden="true"
+                  >
+                    {attachment.extension?.toUpperCase() || "↗"}
+                  </span>
+                  <span className="attachment-name">
+                    <strong>{attachment.name}</strong>
+                    <small>
+                      {attachment.size && attachment.size !== "보기"
+                        ? attachment.size
+                        : `${group.fileType} 문서`}
+                    </small>
+                  </span>
+                  <span className="attachment-open" aria-hidden="true">
+                    열기 ↗
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Toggle({
   checked,
   onChange,
@@ -346,7 +556,6 @@ function Toggle({
 }
 
 export default function Home() {
-  const resultTopRef = useRef<HTMLDivElement>(null);
   const resultBottomRef = useRef<HTMLDivElement>(null);
   const semanticHistoryRef = useRef<HTMLDivElement>(null);
   const autoSearchTimerRef = useRef<number | null>(null);
@@ -381,7 +590,9 @@ export default function Home() {
   const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<Bid | null>(null);
   const [noticeDetail, setNoticeDetail] = useState<Bid | null>(null);
-  const [saved, setSaved] = useState<string[]>([]);
+  const [noticeDetailLoading, setNoticeDetailLoading] = useState(false);
+  const [noticeDetailError, setNoticeDetailError] = useState("");
+  const [savedBids, setSavedBids] = useState<Bid[]>([]);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
     ...DEFAULT_COMPANY_PROFILE,
   });
@@ -420,6 +631,10 @@ export default function Home() {
   });
   const [saveNotice, setSaveNotice] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("light");
+  const saved = useMemo(
+    () => savedBids.map((bid) => bid.id),
+    [savedBids],
+  );
 
   useEffect(() => {
     try {
@@ -439,6 +654,16 @@ export default function Home() {
       setSemanticHistory(restoredHistory);
     } catch {
       window.localStorage.removeItem(SEMANTIC_HISTORY_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(SAVED_BIDS_KEY);
+      if (!stored) return;
+      setSavedBids(normalizeSavedBids(JSON.parse(stored)));
+    } catch {
+      window.localStorage.removeItem(SAVED_BIDS_KEY);
     }
   }, []);
 
@@ -717,14 +942,33 @@ export default function Home() {
     }, delay);
   };
 
-  const scrollToResultBoundary = (boundary: "top" | "bottom") => {
-    const target = boundary === "top" ? resultTopRef.current : resultBottomRef.current;
+  const scrollToPageTop = () => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({
+      behavior: reduceMotion ? "auto" : "smooth",
+      left: 0,
+      top: 0,
+    });
+  };
+
+  const scrollToResultBottom = () => {
+    if (!resultBottomRef.current) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    resultBottomRef.current.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "end",
+    });
+  };
+
+  const scrollToSavedBids = () => {
+    const target = document.getElementById("saved");
     if (!target) return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     target.scrollIntoView({
       behavior: reduceMotion ? "auto" : "smooth",
-      block: boundary === "top" ? "start" : "end",
+      block: "start",
     });
+    window.history.replaceState(null, "", "#saved");
   };
 
   useEffect(() => {
@@ -750,6 +994,28 @@ export default function Home() {
     setProfileOpen(true);
   };
 
+  const toggleProfileServiceRegion = (selectedRegion: string) => {
+    setProfileDraft((current) => {
+      if (selectedRegion === "전체 지역") {
+        return {
+          ...current,
+          serviceRegions: current.serviceRegions.includes("전체 지역")
+            ? []
+            : ["전체 지역"],
+        };
+      }
+
+      const individualRegions = current.serviceRegions.filter(
+        (region) => region !== "전체 지역" && region !== "전국",
+      );
+      const serviceRegions = individualRegions.includes(selectedRegion)
+        ? individualRegions.filter((region) => region !== selectedRegion)
+        : [...individualRegions, selectedRegion];
+
+      return { ...current, serviceRegions };
+    });
+  };
+
   const saveCompanyProfile = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const budgetEok = Number(profileDraft.preferredMaxBudget);
@@ -764,7 +1030,7 @@ export default function Home() {
       preferredMaxBudget: Number.isFinite(budgetEok) && budgetEok > 0
         ? Math.min(Math.round(budgetEok * 100_000_000), 100_000_000_000_000)
         : null,
-      serviceRegions: splitProfileValues(profileDraft.serviceRegions),
+      serviceRegions: normalizeServiceRegions(profileDraft.serviceRegions),
       excludedBusinessAreas: splitProfileValues(profileDraft.excludedBusinessAreas),
     };
     const nextProfile: CompanyProfile = {
@@ -848,10 +1114,47 @@ export default function Home() {
     showSaveNotice("저장한 검색조건을 삭제했습니다.");
   };
 
-  const toggleSaved = (id: string) => {
-    setSaved((current) =>
-      current.includes(id) ? current.filter((savedId) => savedId !== id) : [...current, id],
-    );
+  const toggleSaved = (bid: Bid) => {
+    const alreadySaved = saved.includes(bid.id);
+    const nextSavedBids = alreadySaved
+      ? savedBids.filter((savedBid) => savedBid.id !== bid.id)
+      : [
+          ...savedBids.filter((savedBid) => savedBid.id !== bid.id),
+          { ...bid, attachments: [] },
+        ].slice(-SAVED_BIDS_LIMIT);
+
+    try {
+      window.localStorage.setItem(SAVED_BIDS_KEY, JSON.stringify(nextSavedBids));
+      setSavedBids(nextSavedBids);
+      showSaveNotice(
+        alreadySaved
+          ? "관심공고에서 해제했습니다."
+          : "관심공고에 저장했습니다.",
+      );
+    } catch {
+      showSaveNotice("관심공고를 브라우저에 저장하지 못했습니다.");
+    }
+  };
+
+  const openNoticeDetail = async (bid: Bid) => {
+    setNoticeDetail(bid);
+    setNoticeDetailLoading(true);
+    setNoticeDetailError("");
+
+    try {
+      const response = await fetch(`/api/bids/${encodeURIComponent(bid.id)}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error("첨부문서 조회에 실패했습니다.");
+      }
+      const detail = await response.json() as Bid;
+      setNoticeDetail((current) => current?.id === bid.id ? detail : current);
+    } catch {
+      setNoticeDetailError("첨부문서를 불러오지 못했습니다. 나라장터 원문에서 확인해 주세요.");
+    } finally {
+      setNoticeDetailLoading(false);
+    }
   };
 
   return (
@@ -930,9 +1233,19 @@ export default function Home() {
           >
             <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
           </button>
-          <button className="icon-button notification-button" type="button" aria-label="알림">
-            <span aria-hidden="true">♢</span>
-            <i />
+          <button
+            className="icon-button saved-bids-header-button"
+            type="button"
+            onClick={scrollToSavedBids}
+            aria-label={`관심공고 ${saved.length}건 보기`}
+            title="관심공고 보기"
+          >
+            <span aria-hidden="true">{saved.length > 0 ? "◆" : "◇"}</span>
+            {saved.length > 0 && (
+              <i aria-hidden="true">
+                {saved.length > 99 ? "99+" : saved.length}
+              </i>
+            )}
           </button>
           <button className="profile-button" type="button" onClick={openCompanyProfile}>
             <span className="avatar">IB</span>
@@ -1407,7 +1720,7 @@ export default function Home() {
           </div>
 
           {/* Toolbar */}
-          <div className="result-toolbar" ref={resultTopRef}>
+          <div className="result-toolbar">
             <div>
               <button
                 className="mobile-filter"
@@ -1484,7 +1797,7 @@ export default function Home() {
                       <button
                         type="button"
                         className={`bookmark ${saved.includes(bid.id) ? "saved" : ""}`}
-                        onClick={() => toggleSaved(bid.id)}
+                        onClick={() => toggleSaved(bid)}
                         aria-label={saved.includes(bid.id) ? "관심 공고 해제" : "관심 공고 저장"}
                       >
                         {saved.includes(bid.id) ? "◆" : "◇"}
@@ -1492,7 +1805,7 @@ export default function Home() {
                     </div>
                     <BidTitle
                       bid={bid}
-                      onOpen={() => setNoticeDetail(bid)}
+                      onOpen={() => void openNoticeDetail(bid)}
                     />
                     <p className="bid-summary">{bid.summary}</p>
 
@@ -1614,15 +1927,15 @@ export default function Home() {
             <div className="result-scroll-controls" aria-label="공고 목록 빠른 이동">
               <button
                 type="button"
-                onClick={() => scrollToResultBoundary("top")}
-                aria-label="공고 목록 상단으로 이동"
-                title="공고 목록 상단으로 이동"
+                onClick={scrollToPageTop}
+                aria-label="페이지 최상단으로 이동"
+                title="페이지 최상단으로 이동"
               >
                 ↑
               </button>
               <button
                 type="button"
-                onClick={() => scrollToResultBoundary("bottom")}
+                onClick={scrollToResultBottom}
                 aria-label="공고 목록 하단으로 이동"
                 title="공고 목록 하단으로 이동"
               >
@@ -1635,6 +1948,84 @@ export default function Home() {
             <span>ⓘ</span>
             {searchError || "외부 입찰공고 데이터베이스의 실시간 검색결과입니다."}
           </div>
+
+          <section
+            className="saved-bids-section"
+            id="saved"
+            aria-labelledby="saved-bids-title"
+          >
+            <div className="saved-bids-head">
+              <div>
+                <span className="section-kicker">SAVED BIDS</span>
+                <h2 id="saved-bids-title">
+                  관심공고
+                  <span>{savedBids.length.toLocaleString("ko-KR")}건</span>
+                </h2>
+                <p>저장한 공고를 이 브라우저에서 다시 확인할 수 있습니다.</p>
+              </div>
+              {savedBids.length > 0 && (
+                <small>최대 {SAVED_BIDS_LIMIT}건 저장</small>
+              )}
+            </div>
+
+            {savedBids.length === 0 ? (
+              <div className="saved-bids-empty">
+                <span aria-hidden="true">◇</span>
+                <strong>저장한 관심공고가 없습니다.</strong>
+                <p>공고 카드의 마름모 버튼을 누르면 이곳에 저장됩니다.</p>
+                <a href="#search">입찰공고 살펴보기</a>
+              </div>
+            ) : (
+              <div className="saved-bids-list">
+                {savedBids.map((bid) => (
+                  <article className="saved-bid-card" key={bid.id}>
+                    <div className="saved-bid-meta">
+                      <span className={`category category-${bid.category}`}>
+                        {bid.category}
+                      </span>
+                      <span>{bid.noticeNo}</span>
+                      <span className="saved-bid-score-badge">
+                        적합도 {bid.score}점
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleSaved(bid)}
+                        aria-label={`${bid.title} 관심공고 해제`}
+                        title="관심공고 해제"
+                      >
+                        ◆
+                      </button>
+                    </div>
+                    <button
+                      className="saved-bid-title"
+                      type="button"
+                      onClick={() => void openNoticeDetail(bid)}
+                    >
+                      {bid.title}
+                    </button>
+                    <div className="saved-bid-facts">
+                      <span>
+                        수요기관
+                        <strong>{bid.demandAgency}</strong>
+                      </span>
+                      <span>
+                        사업금액
+                        <strong>{bid.budgetLabel}</strong>
+                      </span>
+                      <span className="saved-bid-fact-region">
+                        참가 지역
+                        <strong>{bid.region}</strong>
+                      </span>
+                      <span className="saved-bid-fact-deadline">
+                        마감일시
+                        <strong>{bid.closeAt}</strong>
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </section>
 
@@ -1755,11 +2146,17 @@ export default function Home() {
               </ul>
             </section>
 
+            <AttachmentDocuments
+              attachments={noticeDetail.attachments ?? []}
+              loading={noticeDetailLoading}
+              error={noticeDetailError}
+            />
+
             <div className="drawer-actions">
               <button
                 className="secondary-action"
                 type="button"
-                onClick={() => toggleSaved(noticeDetail.id)}
+                onClick={() => toggleSaved(noticeDetail)}
               >
                 {saved.includes(noticeDetail.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
               </button>
@@ -1912,7 +2309,7 @@ export default function Home() {
               <button
                 className="secondary-action"
                 type="button"
-                onClick={() => toggleSaved(selected.id)}
+                onClick={() => toggleSaved(selected)}
               >
                 {saved.includes(selected.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
               </button>
@@ -2177,16 +2574,32 @@ export default function Home() {
                 />
               </div>
               <div className="profile-field profile-field-wide">
-                <label htmlFor="profile-service-regions">수행 가능 지역</label>
-                <input
-                  id="profile-service-regions"
-                  value={profileDraft.serviceRegions}
-                  placeholder="쉼표로 구분: 전국 또는 서울, 경기, 인천"
-                  onChange={(event) => setProfileDraft({
-                    ...profileDraft,
-                    serviceRegions: event.target.value,
+                <span className="profile-field-label" id="profile-service-regions-label">
+                  수행 가능 지역
+                </span>
+                <div
+                  className="profile-region-options"
+                  role="group"
+                  aria-labelledby="profile-service-regions-label"
+                >
+                  {regions.map((region) => {
+                    const selected = profileDraft.serviceRegions.includes(region);
+                    return (
+                      <button
+                        key={region}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => toggleProfileServiceRegion(region)}
+                      >
+                        <span aria-hidden="true">{selected ? "✓" : ""}</span>
+                        {region}
+                      </button>
+                    );
                   })}
-                />
+                </div>
+                <small className="profile-field-note">
+                  복수 선택할 수 있습니다. 전체 지역은 다른 지역과 함께 선택되지 않습니다.
+                </small>
               </div>
               <div className="profile-field profile-field-wide">
                 <label htmlFor="profile-excluded-areas">제외 사업 분야</label>
@@ -2233,9 +2646,10 @@ export default function Home() {
           <span aria-hidden="true">⌕</span>
           <small>탐색</small>
         </a>
-        <a href="#saved">
+        <a href="#saved" aria-label={`관심공고 ${saved.length}건`}>
           <span aria-hidden="true">◇</span>
           <small>관심공고</small>
+          {saved.length > 0 && <em>{saved.length}</em>}
         </a>
         <button
           type="button"

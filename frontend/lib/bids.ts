@@ -1,5 +1,13 @@
 export type Eligibility = "참가 가능" | "확인 필요" | "참가 어려움";
 
+export type BidAttachment = {
+  name: string;
+  url: string;
+  size?: string;
+  extension?: string;
+  fileType: string;
+};
+
 export type Bid = {
   id: string;
   noticeNo: string;
@@ -28,6 +36,7 @@ export type Bid = {
   tags: string[];
   isNew?: boolean;
   sourceUrl?: string | null;
+  attachments?: BidAttachment[];
 };
 
 export const bids: Bid[] = [
@@ -190,7 +199,7 @@ export const companyProfile: CompanyProfile = {
   businessAreas: ["공공 SI", "AI·웹서비스 구축"],
   experiences: [],
   preferredMaxBudget: null,
-  serviceRegions: ["전국"],
+  serviceRegions: ["전체 지역"],
   excludedBusinessAreas: [],
   completion: 86,
 };

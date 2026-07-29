@@ -16,6 +16,14 @@ class CamelModel(BaseModel):
     )
 
 
+class BidAttachment(CamelModel):
+    name: str
+    url: str
+    size: str = ""
+    extension: str = ""
+    file_type: str = "기타"
+
+
 class BidRecord(CamelModel):
     id: str
     notice_no: str
@@ -44,6 +52,7 @@ class BidRecord(CamelModel):
     tags: list[str] = Field(default_factory=list)
     is_new: bool = False
     source_url: str | None = None
+    attachments: list[BidAttachment] = Field(default_factory=list)
     raw_data: dict = Field(default_factory=dict)
 
 

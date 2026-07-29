@@ -1,3 +1,15 @@
-from .bid import BidRecord, CompanyProfileInput, SearchRequest, SearchResponse
+from .bid import (
+    BidAttachment,
+    BidRecord,
+    CompanyProfileInput,
+    SearchRequest,
+    SearchResponse,
+)
 
-__all__ = ["BidRecord", "CompanyProfileInput", "SearchRequest", "SearchResponse"]
+__all__ = [
+    "BidAttachment",
+    "BidRecord",
+    "CompanyProfileInput",
+    "SearchRequest",
+    "SearchResponse",
+]

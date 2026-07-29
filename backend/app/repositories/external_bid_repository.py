@@ -6,6 +6,7 @@ import math
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
@@ -50,6 +51,26 @@ REGION_PREFIXES = {
     "경북": ("경상북도",),
     "경남": ("경상남도",),
     "제주": ("제주특별자치도", "제주도"),
+}
+ATTACHMENT_FILE_TYPES = {
+    "pdf": "PDF",
+    "hwp": "한글",
+    "hwpx": "한글",
+    "xls": "엑셀",
+    "xlsx": "엑셀",
+    "csv": "엑셀",
+    "doc": "워드",
+    "docx": "워드",
+    "ppt": "파워포인트",
+    "pptx": "파워포인트",
+    "zip": "압축파일",
+    "rar": "압축파일",
+    "7z": "압축파일",
+    "jpg": "이미지",
+    "jpeg": "이미지",
+    "png": "이미지",
+    "gif": "이미지",
+    "txt": "텍스트",
 }
 
 
@@ -126,6 +147,48 @@ class ExternalBidRepository:
         if deadline.tzinfo is None:
             deadline = deadline.replace(tzinfo=timezone.utc)
         return deadline.astimezone(KOREA_TIMEZONE).strftime("%Y.%m.%d %H:%M")
+
+    @staticmethod
+    def _attachments(value: Any) -> list[dict[str, str]]:
+        if not isinstance(value, list):
+            return []
+
+        attachments: list[dict[str, str]] = []
+        seen_urls: set[str] = set()
+        for index, item in enumerate(value[:100], start=1):
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or "").strip()
+            if not url or url in seen_urls:
+                continue
+            parsed_url = urlparse(url)
+            if parsed_url.scheme not in {"http", "https"}:
+                continue
+
+            name = str(item.get("name") or "").strip() or f"첨부문서 {index}"
+            extension_match = re.search(r"\.([A-Za-z0-9]{1,10})$", name)
+            extension = (
+                extension_match.group(1).lower()
+                if extension_match
+                else ""
+            )
+            is_link = str(item.get("size") or "").strip() == "링크"
+            file_type = (
+                "바로가기"
+                if is_link
+                else ATTACHMENT_FILE_TYPES.get(extension, "기타")
+            )
+            attachments.append(
+                {
+                    "name": name[:500],
+                    "url": url,
+                    "size": str(item.get("size") or "").strip()[:80],
+                    "extension": extension,
+                    "file_type": file_type,
+                }
+            )
+            seen_urls.add(url)
+        return attachments
 
     @staticmethod
     def _keyword_list(request: SearchRequest) -> list[str]:
@@ -485,6 +548,7 @@ class ExternalBidRepository:
                 "tags": tags,
                 "is_new": is_new,
                 "source_url": row.get("source_url"),
+                "attachments": self._attachments(row.get("attachments")),
                 "raw_data": {
                     "externalId": row.get("id"),
                     "bidType": row.get("bid_type"),
@@ -502,14 +566,16 @@ class ExternalBidRepository:
         )
 
     @staticmethod
-    def _columns() -> str:
-        return """
+    def _columns(include_attachments: bool = False) -> str:
+        attachments_column = ", b.attachments" if include_attachments else ""
+        return f"""
             b.id, b.bid_number, b.bid_type, b.title, b.description,
             b.category, b.sub_category, b.detail_category, b.estimated_price,
             b.budget_amount, b.base_price, b.contract_method, b.announce_date,
             b.deadline, b.open_date, b.required_licenses, b.region_restriction,
             b.sme_only, b.source_url, b.noticer_name, b.agency_name,
             b.region_name, b.item_group_name, b.winner_choice_method
+            {attachments_column}
         """
 
     @staticmethod
@@ -522,7 +588,7 @@ class ExternalBidRepository:
     def get(self, bid_id: str) -> BidRecord | None:
         statement = text(
             f"""
-            SELECT {self._columns()}
+            SELECT {self._columns(include_attachments=True)}
             FROM {self.table_name} AS b
             WHERE b.bid_number = :bid_id OR CAST(b.id AS text) = :bid_id
             LIMIT 1
