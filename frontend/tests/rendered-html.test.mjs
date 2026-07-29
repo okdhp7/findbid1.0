@@ -215,6 +215,22 @@ test("관심공고를 브라우저에 저장하고 별도 목록으로 표시한
   assert.match(css, /\.saved-bids-header-button i/);
 });
 
+test("검색 상세조건 아래에 Trander AI 분석 배너를 제공한다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /className="trander-banner"/);
+  assert.match(page, /href="https:\/\/www\.trander\.it"/);
+  assert.match(page, /target="_blank"/);
+  assert.match(page, /rel="noopener noreferrer"/);
+  assert.match(page, /입찰공고 AI 분석 플랫폼[\s\S]*?-\s*Trander/);
+  assert.match(css, /url\("\/trander-ai-bid-banner\.png"\)/);
+  assert.match(css, /\.app-shell \.trander-banner:focus-visible/);
+  assert.match(css, /\.app-shell \.filters \.filter-scroll\s*\{[\s\S]*?overflow-y: auto/);
+});
+
 test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영한다", async () => {
   const [page, bids, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),

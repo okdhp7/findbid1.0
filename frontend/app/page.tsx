@@ -1682,6 +1682,21 @@ export default function Home() {
               <span>→</span>
             </button>
           </div>
+
+          <a
+            className="trander-banner"
+            href="https://www.trander.it"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="입찰공고 AI 분석 플랫폼 - Trander 새 창에서 열기"
+          >
+            <span className="trander-banner-kicker">AI BID ANALYSIS</span>
+            <strong>입찰공고 AI 분석 플랫폼</strong>
+            <span className="trander-banner-brand">
+              - Trander
+              <span aria-hidden="true">↗</span>
+            </span>
+          </a>
           </div>
         </aside>
 
