@@ -178,7 +178,7 @@ test("AI 시맨틱 검색어를 최대 10개 저장하고 선택 및 삭제할 �
   assert.match(css, /\.app-shell \.semantic-history-delete/);
 });
 
-test("관심공고를 브라우저에 저장하고 별도 목록으로 표시한다", async () => {
+test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -191,23 +191,29 @@ test("관심공고를 브라우저에 저장하고 별도 목록으로 표시한
   assert.match(page, /window\.localStorage\.setItem\(SAVED_BIDS_KEY, JSON\.stringify\(nextSavedBids\)\)/);
   assert.match(page, /function normalizeSavedBids\(value: unknown\): Bid\[\]/);
   assert.match(page, /const toggleSaved = \(bid: Bid\) =>/);
-  assert.match(page, /id="saved"/);
+  assert.match(page, /const \[savedBidsOpen, setSavedBidsOpen\] = useState\(false\)/);
+  assert.doesNotMatch(page, /id="saved"/);
   assert.match(page, /aria-labelledby="saved-bids-title"/);
-  assert.match(page, /aria-label=\{`관심공고 \$\{saved\.length\}건`\}/);
-  assert.match(page, /\{saved\.length > 0 && <em>\{saved\.length\}<\/em>\}/);
-  assert.match(page, /const scrollToSavedBids = \(\) =>/);
-  assert.match(page, /target\.scrollIntoView\(\{/);
-  assert.match(page, /className="icon-button saved-bids-header-button"/);
-  assert.match(page, /onClick=\{scrollToSavedBids\}/);
   assert.match(page, /aria-label=\{`관심공고 \$\{saved\.length\}건 보기`\}/);
+  assert.match(page, /\{saved\.length > 0 && <em>\{saved\.length\}<\/em>\}/);
+  assert.doesNotMatch(page, /scrollToSavedBids/);
+  assert.match(page, /className="icon-button saved-bids-header-button"/);
+  assert.match(page, /onClick=\{\(\) => setSavedBidsOpen\(true\)\}/);
+  assert.match(page, /aria-label=\{`관심공고 \$\{saved\.length\}건 보기`\}/);
+  assert.match(page, /className="modal-layer saved-bids-modal-layer"/);
+  assert.match(page, /className="saved-bids-modal"/);
+  assert.match(page, /aria-label="관심공고 창 닫기"/);
+  assert.match(page, /if \(event\.key === "Escape"\) setSavedBidsOpen\(false\)/);
   assert.match(page, /savedBids\.map\(\(bid\) =>/);
   assert.match(page, /공고 카드의 마름모 버튼을 누르면 이곳에 저장됩니다/);
-  assert.match(page, /onClick=\{\(\) => void openNoticeDetail\(bid\)\}/);
+  assert.match(page, /setSavedBidsOpen\(false\);[\s\S]*?void openNoticeDetail\(bid\)/);
   assert.match(page, /className="saved-bid-score-badge">[\s\S]*?적합도 \{bid\.score\}점/);
   assert.match(page, /className="saved-bid-fact-region">[\s\S]*?참가 지역[\s\S]*?<strong>\{bid\.region\}<\/strong>/);
   assert.match(page, /className="saved-bid-fact-deadline">[\s\S]*?마감일시[\s\S]*?<strong>\{bid\.closeAt\}<\/strong>/);
   assert.doesNotMatch(page, /saved-bid-fact-wide/);
-  assert.match(css, /\.app-shell \.saved-bids-section/);
+  assert.doesNotMatch(css, /\.app-shell \.saved-bids-section/);
+  assert.match(css, /\.app-shell \.saved-bids-modal/);
+  assert.match(css, /\.app-shell \.saved-bids-modal-content/);
   assert.match(css, /\.app-shell \.saved-bids-list/);
   assert.match(css, /\.app-shell \.saved-bid-card/);
   assert.match(css, /\.app-shell \.saved-bid-meta \.saved-bid-score-badge/);

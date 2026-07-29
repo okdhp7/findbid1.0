@@ -593,6 +593,7 @@ export default function Home() {
   const [noticeDetailLoading, setNoticeDetailLoading] = useState(false);
   const [noticeDetailError, setNoticeDetailError] = useState("");
   const [savedBids, setSavedBids] = useState<Bid[]>([]);
+  const [savedBidsOpen, setSavedBidsOpen] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
     ...DEFAULT_COMPANY_PROFILE,
   });
@@ -960,17 +961,6 @@ export default function Home() {
     });
   };
 
-  const scrollToSavedBids = () => {
-    const target = document.getElementById("saved");
-    if (!target) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    target.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "start",
-    });
-    window.history.replaceState(null, "", "#saved");
-  };
-
   useEffect(() => {
     const initialSearch = window.setTimeout(() => {
       void runSearch(DEFAULT_SEARCH);
@@ -983,6 +973,20 @@ export default function Home() {
       searchAbortControllerRef.current?.abort();
     };
   }, [runSearch]);
+
+  useEffect(() => {
+    if (!savedBidsOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSavedBidsOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [savedBidsOpen]);
 
   const showSaveNotice = (message: string) => {
     setSaveNotice(message);
@@ -1212,10 +1216,10 @@ export default function Home() {
 
         <nav className="main-nav" aria-label="주요 메뉴">
           <a className="active" href="#search">입찰 탐색</a>
-          <a href="#saved">
+          <button type="button" onClick={() => setSavedBidsOpen(true)}>
             관심 공고
             <em>{saved.length}</em>
-          </a>
+          </button>
           <a href="#insight">인사이트</a>
           <a href="#alerts">알림</a>
         </nav>
@@ -1236,7 +1240,7 @@ export default function Home() {
           <button
             className="icon-button saved-bids-header-button"
             type="button"
-            onClick={scrollToSavedBids}
+            onClick={() => setSavedBidsOpen(true)}
             aria-label={`관심공고 ${saved.length}건 보기`}
             title="관심공고 보기"
           >
@@ -1963,84 +1967,6 @@ export default function Home() {
             <span>ⓘ</span>
             {searchError || "외부 입찰공고 데이터베이스의 실시간 검색결과입니다."}
           </div>
-
-          <section
-            className="saved-bids-section"
-            id="saved"
-            aria-labelledby="saved-bids-title"
-          >
-            <div className="saved-bids-head">
-              <div>
-                <span className="section-kicker">SAVED BIDS</span>
-                <h2 id="saved-bids-title">
-                  관심공고
-                  <span>{savedBids.length.toLocaleString("ko-KR")}건</span>
-                </h2>
-                <p>저장한 공고를 이 브라우저에서 다시 확인할 수 있습니다.</p>
-              </div>
-              {savedBids.length > 0 && (
-                <small>최대 {SAVED_BIDS_LIMIT}건 저장</small>
-              )}
-            </div>
-
-            {savedBids.length === 0 ? (
-              <div className="saved-bids-empty">
-                <span aria-hidden="true">◇</span>
-                <strong>저장한 관심공고가 없습니다.</strong>
-                <p>공고 카드의 마름모 버튼을 누르면 이곳에 저장됩니다.</p>
-                <a href="#search">입찰공고 살펴보기</a>
-              </div>
-            ) : (
-              <div className="saved-bids-list">
-                {savedBids.map((bid) => (
-                  <article className="saved-bid-card" key={bid.id}>
-                    <div className="saved-bid-meta">
-                      <span className={`category category-${bid.category}`}>
-                        {bid.category}
-                      </span>
-                      <span>{bid.noticeNo}</span>
-                      <span className="saved-bid-score-badge">
-                        적합도 {bid.score}점
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleSaved(bid)}
-                        aria-label={`${bid.title} 관심공고 해제`}
-                        title="관심공고 해제"
-                      >
-                        ◆
-                      </button>
-                    </div>
-                    <button
-                      className="saved-bid-title"
-                      type="button"
-                      onClick={() => void openNoticeDetail(bid)}
-                    >
-                      {bid.title}
-                    </button>
-                    <div className="saved-bid-facts">
-                      <span>
-                        수요기관
-                        <strong>{bid.demandAgency}</strong>
-                      </span>
-                      <span>
-                        사업금액
-                        <strong>{bid.budgetLabel}</strong>
-                      </span>
-                      <span className="saved-bid-fact-region">
-                        참가 지역
-                        <strong>{bid.region}</strong>
-                      </span>
-                      <span className="saved-bid-fact-deadline">
-                        마감일시
-                        <strong>{bid.closeAt}</strong>
-                      </span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
       </section>
 
@@ -2173,7 +2099,7 @@ export default function Home() {
                 type="button"
                 onClick={() => toggleSaved(noticeDetail)}
               >
-                {saved.includes(noticeDetail.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
+                {saved.includes(noticeDetail.id) ? "◆ 관심공고 저장됨" : "◇ 관심공고 저장"}
               </button>
               <OriginalNoticeAction bid={noticeDetail} />
             </div>
@@ -2331,6 +2257,112 @@ export default function Home() {
               <OriginalNoticeAction bid={selected} />
             </div>
           </aside>
+        </div>
+      )}
+
+      {/* ── Saved Bids Modal ── */}
+      {savedBidsOpen && (
+        <div
+          className="modal-layer saved-bids-modal-layer"
+          role="presentation"
+          onMouseDown={() => setSavedBidsOpen(false)}
+        >
+          <section
+            className="saved-bids-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="saved-bids-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close"
+              type="button"
+              onClick={() => setSavedBidsOpen(false)}
+              aria-label="관심공고 창 닫기"
+              autoFocus
+            >
+              ×
+            </button>
+
+            <div className="saved-bids-head">
+              <div>
+                <span className="section-kicker">SAVED BIDS</span>
+                <h2 id="saved-bids-title">
+                  관심공고
+                  <span>{savedBids.length.toLocaleString("ko-KR")}건</span>
+                </h2>
+                <p>저장한 공고를 이 브라우저에서 다시 확인할 수 있습니다.</p>
+              </div>
+              {savedBids.length > 0 && (
+                <small>최대 {SAVED_BIDS_LIMIT}건 저장</small>
+              )}
+            </div>
+
+            <div className="saved-bids-modal-content">
+              {savedBids.length === 0 ? (
+                <div className="saved-bids-empty">
+                  <span aria-hidden="true">◇</span>
+                  <strong>저장한 관심공고가 없습니다.</strong>
+                  <p>공고 카드의 마름모 버튼을 누르면 이곳에 저장됩니다.</p>
+                  <a href="#search" onClick={() => setSavedBidsOpen(false)}>
+                    입찰공고 살펴보기
+                  </a>
+                </div>
+              ) : (
+                <div className="saved-bids-list">
+                  {savedBids.map((bid) => (
+                    <article className="saved-bid-card" key={bid.id}>
+                      <div className="saved-bid-meta">
+                        <span className={`category category-${bid.category}`}>
+                          {bid.category}
+                        </span>
+                        <span>{bid.noticeNo}</span>
+                        <span className="saved-bid-score-badge">
+                          적합도 {bid.score}점
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleSaved(bid)}
+                          aria-label={`${bid.title} 관심공고 해제`}
+                          title="관심공고 해제"
+                        >
+                          ◆
+                        </button>
+                      </div>
+                      <button
+                        className="saved-bid-title"
+                        type="button"
+                        onClick={() => {
+                          setSavedBidsOpen(false);
+                          void openNoticeDetail(bid);
+                        }}
+                      >
+                        {bid.title}
+                      </button>
+                      <div className="saved-bid-facts">
+                        <span>
+                          수요기관
+                          <strong>{bid.demandAgency}</strong>
+                        </span>
+                        <span>
+                          사업금액
+                          <strong>{bid.budgetLabel}</strong>
+                        </span>
+                        <span className="saved-bid-fact-region">
+                          참가 지역
+                          <strong>{bid.region}</strong>
+                        </span>
+                        <span className="saved-bid-fact-deadline">
+                          마감일시
+                          <strong>{bid.closeAt}</strong>
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
         </div>
       )}
 
@@ -2661,11 +2693,15 @@ export default function Home() {
           <span aria-hidden="true">⌕</span>
           <small>탐색</small>
         </a>
-        <a href="#saved" aria-label={`관심공고 ${saved.length}건`}>
+        <button
+          type="button"
+          onClick={() => setSavedBidsOpen(true)}
+          aria-label={`관심공고 ${saved.length}건 보기`}
+        >
           <span aria-hidden="true">◇</span>
           <small>관심공고</small>
           {saved.length > 0 && <em>{saved.length}</em>}
-        </a>
+        </button>
         <button
           type="button"
           onClick={() => setFiltersOpen(true)}

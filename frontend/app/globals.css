@@ -288,18 +288,23 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
 }
 
-.app-shell .main-nav a {
+.app-shell .main-nav a,
+.app-shell .main-nav button {
   align-items: center;
+  background: none;
+  border: 0;
   color: var(--muted);
   display: flex;
   font-size: 14px;
   font-weight: 600;
   gap: 6px;
+  padding: 0;
   position: relative;
   transition: color 0.18s;
 }
 
-.app-shell .main-nav a:hover {
+.app-shell .main-nav a:hover,
+.app-shell .main-nav button:hover {
   color: var(--text-soft);
 }
 
@@ -2220,19 +2225,34 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Saved Bids */
-.app-shell .saved-bids-section {
-  border-top: 1px solid var(--border);
-  margin-top: 42px;
-  padding-top: 34px;
-  scroll-margin-top: 96px;
+.app-shell .saved-bids-modal {
+  animation: modal-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 40px);
+  max-width: 960px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.app-shell .saved-bids-modal > .modal-close {
+  z-index: 2;
 }
 
 .app-shell .saved-bids-head {
   align-items: flex-end;
+  border-bottom: 1px solid var(--border);
   display: flex;
+  flex: 0 0 auto;
   gap: 20px;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin: 0;
+  padding: 30px 72px 22px 30px;
 }
 
 .app-shell .saved-bids-head h2 {
@@ -2262,6 +2282,14 @@ a { color: inherit; text-decoration: none; }
   border-radius: 999px;
   padding: 6px 10px;
   white-space: nowrap;
+}
+
+.app-shell .saved-bids-modal-content {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 30px 30px;
+  scrollbar-color: rgba(79, 142, 247, 0.36) transparent;
+  scrollbar-width: thin;
 }
 
 .app-shell .saved-bids-empty {
@@ -3740,6 +3768,36 @@ a { color: inherit; text-decoration: none; }
     width: 110px;
   }
 
+  .app-shell .saved-bids-modal-layer {
+    padding: 0;
+  }
+
+  .app-shell .saved-bids-modal {
+    border: 0;
+    border-radius: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .app-shell .saved-bids-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 62px 18px 20px;
+  }
+
+  .app-shell .saved-bids-modal-content {
+    padding: 18px 16px calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell .saved-bids-list {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell .saved-bid-card {
+    padding: 15px;
+  }
+
   /* 상세 분석 드로어: 하단 모바일 독(66px)에 가려지지 않도록 하단 패딩 확보 */
   .app-shell .detail-drawer {
     padding-bottom: calc(32px + 66px + env(safe-area-inset-bottom, 0px));
@@ -3986,26 +4044,6 @@ a { color: inherit; text-decoration: none; }
 
   .app-shell .drawer-actions {
     grid-template-columns: 1fr;
-  }
-
-  .app-shell .saved-bids-section {
-    margin-top: 34px;
-    padding-top: 28px;
-    scroll-margin-top: 72px;
-  }
-
-  .app-shell .saved-bids-head {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .app-shell .saved-bids-list {
-    grid-template-columns: 1fr;
-  }
-
-  .app-shell .saved-bid-card {
-    padding: 15px;
   }
 
   /* Modal */
