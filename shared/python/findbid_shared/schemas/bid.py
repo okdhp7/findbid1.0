@@ -39,6 +39,9 @@ class BidRecord(CamelModel):
     close_at: str
     days_left: int = 0
     score: int = Field(default=70, ge=0, le=100)
+    feedback_adjustment: int = Field(default=0, ge=-10, le=10)
+    session_feedback: str | None = None
+    session_feedback_source: str | None = None
     score_confidence: int = Field(default=0, ge=0, le=100)
     score_breakdown: dict[str, int] = Field(default_factory=dict)
     score_reasons: list[str] = Field(default_factory=list)
@@ -94,6 +97,10 @@ class QueryPlan(CamelModel):
     search_id: str = ""
     search_trace: list[str] = Field(default_factory=list)
     elapsed_ms: int = 0
+    search_fingerprint: str = ""
+    feedback_applied: bool = False
+    feedback_enabled: bool = True
+    versions: dict[str, str | int] = Field(default_factory=dict)
 
 
 class SearchResponse(CamelModel):
@@ -104,3 +111,18 @@ class SearchResponse(CamelModel):
     closing_soon_total: int
     average_score: int
     items: list[BidRecord]
+
+
+class FeedbackRequest(CamelModel):
+    search_id: str = Field(min_length=1, max_length=80)
+    bid_id: str = Field(min_length=1, max_length=160)
+    feedback_type: str = Field(pattern="^(positive|negative|exclude|clear)$")
+    reason: str = Field(default="", max_length=80)
+    source: str = Field(default="detail", pattern="^(favorite|detail)$")
+
+
+class FeedbackResponse(CamelModel):
+    accepted: bool
+    feedback_type: str
+    message: str
+    expires_in_seconds: int

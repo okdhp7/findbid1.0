@@ -439,12 +439,7 @@ class ExternalBidRepository:
         semantic_similarity: int | None = None,
     ) -> BidRecord:
         request = request or SearchRequest()
-        budget = int(
-            row.get("budget_amount")
-            or row.get("estimated_price")
-            or row.get("base_price")
-            or 0
-        )
+        budget = int(row.get("estimated_price") or 0)
         corpus = " ".join(
             str(row.get(key) or "")
             for key in (
@@ -661,8 +656,7 @@ class ExternalBidRepository:
                 else ">"
             )
             conditions.append(
-                "coalesce(nullif(b.budget_amount, 0), "
-                "nullif(b.estimated_price, 0), nullif(b.base_price, 0), 0)"
+                "nullif(b.estimated_price, 0)"
                 f" {min_operator} :min_budget"
             )
             params["min_budget"] = min_budget
@@ -683,8 +677,7 @@ class ExternalBidRepository:
                 else "<"
             )
             conditions.append(
-                "coalesce(nullif(b.budget_amount, 0), "
-                "nullif(b.estimated_price, 0), nullif(b.base_price, 0), 0)"
+                "nullif(b.estimated_price, 0)"
                 f" {max_operator} :max_budget"
             )
             params["max_budget"] = max_budget

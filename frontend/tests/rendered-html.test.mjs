@@ -176,6 +176,8 @@ test("AI 시맨틱 검색어를 최대 10개 저장하고 선택 및 삭제할 �
   assert.match(css, /\.app-shell \.semantic-history-panel/);
   assert.match(css, /\.app-shell \.semantic-history-select/);
   assert.match(css, /\.app-shell \.semantic-history-delete/);
+  assert.match(css, /\.app-shell \.hero:has\(\.semantic-history-panel\)[\s\S]*?overflow: visible[\s\S]*?z-index: 120/);
+  assert.match(css, /\.app-shell \.semantic-history-panel[\s\S]*?z-index: 1000/);
 });
 
 test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다", async () => {
@@ -190,7 +192,7 @@ test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다
   assert.match(page, /window\.localStorage\.getItem\(SAVED_BIDS_KEY\)/);
   assert.match(page, /window\.localStorage\.setItem\(SAVED_BIDS_KEY, JSON\.stringify\(nextSavedBids\)\)/);
   assert.match(page, /function normalizeSavedBids\(value: unknown\): Bid\[\]/);
-  assert.match(page, /const toggleSaved = \(bid: Bid\) =>/);
+  assert.match(page, /const toggleSaved = async \(bid: Bid\) =>/);
   assert.match(page, /const \[savedBidsOpen, setSavedBidsOpen\] = useState\(false\)/);
   assert.doesNotMatch(page, /id="saved"/);
   assert.match(page, /aria-labelledby="saved-bids-title"/);
@@ -198,6 +200,10 @@ test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다
   assert.match(page, /\{saved\.length > 0 && <em>\{saved\.length\}<\/em>\}/);
   assert.doesNotMatch(page, /scrollToSavedBids/);
   assert.match(page, /className="icon-button saved-bids-header-button"/);
+  assert.match(page, /className="saved-bids-cart-icon"/);
+  assert.match(page, /className="cart-diamond"/);
+  assert.match(page, /className="cart-outline" d="M1 3\.5h3\.2l1\.6 12h13\.4L21\.5 5\.5"/);
+  assert.doesNotMatch(page, /className="cart-outline"[^>]*H6/);
   assert.match(page, /onClick=\{\(\) => setSavedBidsOpen\(true\)\}/);
   assert.match(page, /aria-label=\{`관심공고 \$\{saved\.length\}건 보기`\}/);
   assert.match(page, /className="modal-layer saved-bids-modal-layer"/);
@@ -219,6 +225,35 @@ test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다
   assert.match(css, /\.app-shell \.saved-bid-meta \.saved-bid-score-badge/);
   assert.match(css, /\.mobile-dock em/);
   assert.match(css, /\.saved-bids-header-button i/);
+  assert.match(css, /\.saved-bids-cart-icon/);
+  assert.match(
+    css,
+    /\.saved-bids-cart-icon \.cart-diamond\s*\{[\s\S]*?fill:\s*var\(--gold-accent\)/,
+  );
+  assert.match(
+    css,
+    /\.app-shell \.theme-toggle \.theme-icon\s*\{[\s\S]*?height:\s*23px/,
+  );
+  assert.match(
+    css,
+    /\.app-shell \.theme-toggle \.theme-icon\s*\{[\s\S]*?transform:\s*translateY\(-0\.2px\)/,
+  );
+  assert.equal((page.match(/className="theme-icon"/g) ?? []).length, 2);
+});
+
+test("주요 메뉴에 심플한 선형 아이콘을 표시한다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  const nav = page.match(/<nav className="main-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+  assert.equal((nav.match(/className="nav-icon"/g) ?? []).length, 3);
+  assert.match(nav, /입찰 탐색/);
+  assert.match(nav, /인사이트/);
+  assert.match(nav, /알림/);
+  assert.doesNotMatch(nav, /관심 공고/);
+  assert.match(css, /\.app-shell \.main-nav \.nav-icon/);
 });
 
 test("검색 상세조건 아래에 Trander AI 분석 배너를 제공한다", async () => {
@@ -235,6 +270,39 @@ test("검색 상세조건 아래에 Trander AI 분석 배너를 제공한다", a
   assert.match(css, /url\("\/trander-ai-bid-banner\.png"\)/);
   assert.match(css, /\.app-shell \.trander-banner:focus-visible/);
   assert.match(css, /\.app-shell \.filters \.filter-scroll\s*\{[\s\S]*?overflow-y: auto/);
+});
+
+test("익명 세션 추천 피드백과 비밀번호 관리페이지를 제공한다", async () => {
+  const [page, adminPage, searchRoute, feedbackRoute, adminAuth, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/search/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/feedback/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(searchRoute, /anonymousSession\(request\)/);
+  assert.match(searchRoute, /"x-session-id": sessionId/);
+  assert.match(feedbackRoute, /\/api\/v1\/feedback/);
+  assert.match(page, /추천 결과 피드백/);
+  assert.match(page, /공고 내용을 확인한 결과가 우리 회사에 적합한지 알려주세요/);
+  assert.match(page, /추천 적합/);
+  assert.match(page, /추천 부적합/);
+  assert.match(page, /부적합 사유를 선택해 주세요/);
+  assert.match(page, /이 공고를 현재 세션에서 제외/);
+  assert.match(page, /상세평가 취소/);
+  assert.match(page, /postRecommendationFeedback\([\s\S]*?"favorite"/);
+  assert.match(page, /favoriteSearchId/);
+  assert.match(adminPage, /추천 운영관리/);
+  assert.match(adminPage, /\/api\/admin\/login/);
+  assert.match(adminPage, /\/api\/admin\/status/);
+  assert.match(adminAuth, /process\.env\.FINDBID_ADMIN_PASSWORD \?\? "findbid2026"/);
+  assert.match(adminAuth, /HttpOnly/);
+  assert.match(adminAuth, /SameSite=Strict/);
+  assert.match(css, /\.app-shell \.bid-feedback/);
+  assert.match(css, /\.admin-login-card/);
+  assert.match(css, /\.admin-dashboard/);
 });
 
 test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영한다", async () => {
@@ -284,6 +352,13 @@ test("검색 과정과 처리시간을 펼쳐서 확인할 수 있다", async ()
   assert.match(page, /setSearchTrace\(data\.queryPlan\?\.searchTrace \?\? \[\]\)/);
   assert.match(page, />검색 과정 보기<\/span>/);
   assert.match(page, /className="search-trace-panel"/);
+  assert.match(
+    page,
+    /className="intent-heading"[\s\S]*?<span className="intent-label">AI가 이해한 조건<\/span>[\s\S]*?className="search-trace-toggle"/,
+  );
+  assert.match(page, /className="intent-values"/);
+  assert.match(css, /\.app-shell \.parsed-intent[\s\S]*?grid-template-columns: auto minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.app-shell \.intent-values[\s\S]*?display: flex[\s\S]*?flex-wrap: wrap/);
   assert.match(page, /searchElapsedMs\.toLocaleString\("ko-KR"\)/);
   assert.match(css, /\.app-shell \.search-trace-toggle/);
   assert.match(css, /\.app-shell \.search-trace-panel/);
@@ -389,8 +464,14 @@ test("프로필 기반 적합도와 신뢰도 및 산정 근거를 표시한다"
 });
 
 test("공고 카드에 일치 역량과 속성 검색조건을 구분해 표시한다", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const [page, css, repository] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../backend/app/repositories/external_bid_repository.py", import.meta.url),
+      "utf8",
+    ),
+  ]);
 
   assert.match(page, /bid\.matched\.length > 0/);
   assert.match(page, /bid\.matched\.map\(\(item\) =>/);
@@ -399,6 +480,8 @@ test("공고 카드에 일치 역량과 속성 검색조건을 구분해 표시�
   assert.match(page, /검색조건/);
   assert.match(page, /일치하는 검색조건/);
   assert.match(page, />✓ \{item\}</);
+  assert.match(repository, /"사업금액: "/);
+  assert.doesNotMatch(repository, /"사업금액\(VAT별도\): "/);
   const matchedItemStyle = css.match(
     /\.app-shell \.match-group span:not\(\.match-label\)\s*\{([^}]*)\}/,
   )?.[1] ?? "";
@@ -448,10 +531,10 @@ test("잘린 공고 제목은 기존 상세 클릭과 조건부 툴팁을 함께
   assert.match(css, /\.bid-title-tooltip:focus-within \.bid-title-tooltip-content/);
 });
 
-test("금액 항목 명칭은 사업금액으로 통일한다", async () => {
+test("금액 항목 명칭은 VAT별도 사업금액으로 통일한다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
-  assert.equal((page.match(/>사업금액<\/(?:span|label)>/g) ?? []).length, 4);
+  assert.equal((page.match(/>사업금액\(VAT별도\)<\/(?:span|label)>/g) ?? []).length, 4);
   assert.doesNotMatch(page, /추정금액/);
 });
 
@@ -469,21 +552,53 @@ test("요약 카드의 값과 단위는 축소된 글자 크기를 사용한다"
   assert.match(css, /@media[\s\S]*?\.app-shell \.metrics strong\s*\{[\s\S]*?font-size:\s*20px/);
 });
 
-test("FindBid 로고는 입찰정보 검색을 상징하는 고급형 SVG 워드마크를 사용한다", async () => {
+test("FindBid 로고는 배경 없는 FB 모노그램 SVG 워드마크를 사용한다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(page, /id="findbid-logo-gradient"/);
-  assert.match(page, /className="logo-bid-mark"[^>]*>Bid<\/text>/);
-  assert.match(page, /className="logo-lens"/);
-  assert.match(page, /className="logo-lens-handle"/);
+  assert.match(page, /id="findbid-fb-gradient"/);
+  assert.match(page, /id="findbid-fb-b-gradient"/);
+  assert.match(page, /id="findbid-fb-gold"/);
+  assert.match(page, /className="logo-monogram-f"/);
+  assert.match(page, /className="logo-monogram-b"/);
+  assert.match(page, /className="logo-monogram-diamond"/);
+  assert.doesNotMatch(page, /className="logo-tile"/);
+  assert.doesNotMatch(page, /className="logo-lens"/);
+  assert.doesNotMatch(page, /className="logo-bid-mark"/);
   assert.match(page, /className="word-find">Find/);
   assert.match(page, /className="word-bid">Bid/);
   assert.match(page, /AI Bid Searcher/);
   assert.doesNotMatch(page, /<span className="logo-symbol">F<\/span>/);
   assert.doesNotMatch(page, /className="logo-f"/);
   assert.doesNotMatch(page, /className="logo-gavel"/);
-  assert.match(css, /\.app-shell \.logo-bid-mark/);
+  assert.match(css, /\.app-shell \.logo-monogram-f/);
+  assert.match(css, /\.app-shell \.logo-monogram-b/);
+  assert.match(css, /\.app-shell \.logo-monogram-diamond/);
+  assert.doesNotMatch(css, /\.app-shell \.logo-symbol::after/);
   assert.match(css, /\.app-shell \.word-bid/);
   assert.match(css, /background-clip:\s*text/);
+});
+
+test("관리자가 추천 피드백 수집과 표시를 끌 수 있다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const admin = await readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  const adminRoute = await readFile(
+    new URL("../app/api/admin/feedback-settings/route.ts", import.meta.url),
+    "utf8",
+  );
+  const publicRoute = await readFile(
+    new URL("../app/api/feedback/settings/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(page, /const \[feedbackEnabled, setFeedbackEnabled\] = useState\(false\)/);
+  assert.match(page, /className="analysis-section analysis-feedback"/);
+  assert.match(page, /detail-drawer\$\{feedbackBidId === selected\.id \? " feedback-expanded" : ""\}/);
+  assert.match(page, /data\.queryPlan\?\.feedbackEnabled === true/);
+  assert.match(admin, /추천 결과 피드백/);
+  assert.match(admin, /피드백 받음/);
+  assert.match(admin, /받지 않음/);
+  assert.match(admin, /updateFeedbackEnabled/);
+  assert.match(adminRoute, /isAdminAuthenticated/);
+  assert.match(publicRoute, /feedback\/settings/);
 });

@@ -23,6 +23,10 @@ export type Bid = {
   closeAt: string;
   daysLeft: number;
   score: number;
+  feedbackAdjustment?: number;
+  sessionFeedback?: "positive" | "negative" | null;
+  sessionFeedbackSource?: "favorite" | "detail" | null;
+  favoriteSearchId?: string;
   scoreConfidence?: number;
   scoreBreakdown?: Record<string, number>;
   scoreReasons?: string[];

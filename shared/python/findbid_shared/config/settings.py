@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     semantic_candidate_limit: int = 5000
     semantic_result_cache_seconds: int = 120
     search_trace_enabled: bool = True
+    feedback_session_ttl_seconds: int = 7200
+    feedback_adjustment_limit: int = 10
+    admin_password: str = "findbid2026"
 
     model_config = SettingsConfigDict(
         env_file=".env",

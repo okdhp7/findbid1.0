@@ -81,6 +81,17 @@ const SEMANTIC_HISTORY_LIMIT = 10;
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const SAVED_BIDS_KEY = "findbid.saved-bids.v1";
 const SAVED_BIDS_LIMIT = 50;
+const feedbackReasons = [
+  "검색 주제와 다름",
+  "업무 구분이 다름",
+  "지역이 맞지 않음",
+  "사업금액이 맞지 않음",
+  "계약방법이 맞지 않음",
+  "수요기관이 맞지 않음",
+  "회사 역량과 맞지 않음",
+  "이미 확인한 공고",
+  "기타",
+];
 
 type CompanyProfileDraft = {
   name: string;
@@ -151,6 +162,9 @@ function normalizeSavedBid(value: unknown): Bid | null {
     closeAt: typeof bid.closeAt === "string" ? bid.closeAt : "마감일 미정",
     daysLeft: Number.isFinite(Number(bid.daysLeft)) ? Number(bid.daysLeft) : 0,
     score: Number.isFinite(Number(bid.score)) ? Number(bid.score) : 0,
+    favoriteSearchId: typeof bid.favoriteSearchId === "string"
+      ? bid.favoriteSearchId
+      : "",
     scoreConfidence: Number.isFinite(Number(bid.scoreConfidence))
       ? Number(bid.scoreConfidence)
       : 0,
@@ -594,6 +608,9 @@ export default function Home() {
   const [noticeDetailError, setNoticeDetailError] = useState("");
   const [savedBids, setSavedBids] = useState<Bid[]>([]);
   const [savedBidsOpen, setSavedBidsOpen] = useState(false);
+  const [feedbackBidId, setFeedbackBidId] = useState("");
+  const [feedbackSubmittingId, setFeedbackSubmittingId] = useState("");
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
     ...DEFAULT_COMPANY_PROFILE,
   });
@@ -636,6 +653,25 @@ export default function Home() {
     () => savedBids.map((bid) => bid.id),
     [savedBids],
   );
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/feedback/settings", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const data = await response.json() as { feedbackEnabled?: boolean };
+        return data.feedbackEnabled === true;
+      })
+      .then((enabled) => {
+        if (active) setFeedbackEnabled(enabled);
+      })
+      .catch(() => {
+        if (active) setFeedbackEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -805,6 +841,7 @@ export default function Home() {
           searchId?: string;
           searchTrace?: string[];
           elapsedMs?: number;
+          feedbackEnabled?: boolean;
         };
         items: Bid[];
       };
@@ -830,6 +867,7 @@ export default function Home() {
       setSearchTrace(data.queryPlan?.searchTrace ?? []);
       setSearchTraceId(data.queryPlan?.searchId ?? "");
       setSearchElapsedMs(data.queryPlan?.elapsedMs ?? 0);
+      setFeedbackEnabled(data.queryPlan?.feedbackEnabled === true);
       setSearchTraceOpen(false);
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
@@ -846,6 +884,7 @@ export default function Home() {
       setSearchTrace([]);
       setSearchTraceId("");
       setSearchElapsedMs(0);
+      setFeedbackEnabled(false);
       setSearchTraceOpen(false);
     } finally {
       if (requestId === searchRequestIdRef.current) {
@@ -863,6 +902,103 @@ export default function Home() {
   const runSearchNow = (snapshot: SearchSnapshot, page = 1) => {
     cancelScheduledSearch();
     void runSearch(snapshot, page);
+  };
+
+  const postRecommendationFeedback = async (
+    bid: Bid,
+    feedbackType: "positive" | "negative" | "exclude" | "clear",
+    reason = "",
+    source: "favorite" | "detail" = "detail",
+    searchId = searchTraceId,
+  ) => {
+    if (!feedbackEnabled) {
+      throw new Error("추천 피드백 수집이 현재 비활성화되어 있습니다.");
+    }
+    if (!searchId) {
+      throw new Error("검색 결과를 다시 불러온 후 피드백해 주세요.");
+    }
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        searchId,
+        bidId: bid.id,
+        feedbackType,
+        reason,
+        source,
+      }),
+    });
+    const data = await response.json() as { message?: string; detail?: string };
+    if (!response.ok) {
+      throw new Error(data.detail ?? "피드백 처리 오류");
+    }
+    return data;
+  };
+
+  const submitRecommendationFeedback = async (
+    bid: Bid,
+    feedbackType: "positive" | "negative" | "exclude" | "clear",
+    reason = "",
+  ) => {
+    setFeedbackSubmittingId(bid.id);
+    try {
+      const data = await postRecommendationFeedback(
+        bid,
+        feedbackType,
+        reason,
+        "detail",
+      );
+      let nextFeedback: Bid["sessionFeedback"] = (
+        feedbackType === "positive" || feedbackType === "negative"
+          ? feedbackType
+          : null
+      );
+      let nextSource: Bid["sessionFeedbackSource"] = (
+        feedbackType === "clear" ? null : "detail"
+      );
+      let nextAdjustment = (
+        feedbackType === "positive"
+          ? 5
+          : feedbackType === "negative" || feedbackType === "exclude"
+          ? -6
+          : 0
+      );
+      if (feedbackType === "clear" && saved.includes(bid.id)) {
+        await postRecommendationFeedback(
+          bid,
+          "positive",
+          "",
+          "favorite",
+          savedBids.find((item) => item.id === bid.id)?.favoriteSearchId
+            || searchTraceId,
+        );
+        nextFeedback = "positive";
+        nextSource = "favorite";
+        nextAdjustment = 3;
+      }
+      setFeedbackBidId("");
+      showSaveNotice(data.message ?? "추천 피드백을 반영했습니다.");
+      setSelected((current) => current?.id === bid.id
+        ? {
+            ...current,
+            sessionFeedback: nextFeedback,
+            sessionFeedbackSource: nextSource,
+            feedbackAdjustment: nextAdjustment,
+          }
+        : current);
+      if (feedbackType === "exclude") {
+        setSelected(null);
+      }
+      await runSearch(currentSearchSnapshot(), currentPage);
+    } catch (error) {
+      showSaveNotice(
+        error instanceof Error
+          ? error.message
+          : "피드백을 처리하지 못했습니다.",
+      );
+    } finally {
+      setFeedbackSubmittingId("");
+    }
   };
 
   const rememberSemanticQuery = (query: string) => {
@@ -1118,25 +1254,90 @@ export default function Home() {
     showSaveNotice("저장한 검색조건을 삭제했습니다.");
   };
 
-  const toggleSaved = (bid: Bid) => {
+  const toggleSaved = async (bid: Bid) => {
     const alreadySaved = saved.includes(bid.id);
+    const savedBid = savedBids.find((item) => item.id === bid.id);
+    const favoriteSearchId = (
+      savedBid?.favoriteSearchId
+      || bid.favoriteSearchId
+      || searchTraceId
+    );
     const nextSavedBids = alreadySaved
       ? savedBids.filter((savedBid) => savedBid.id !== bid.id)
       : [
           ...savedBids.filter((savedBid) => savedBid.id !== bid.id),
-          { ...bid, attachments: [] },
+          {
+            ...bid,
+            attachments: [],
+            favoriteSearchId,
+          },
         ].slice(-SAVED_BIDS_LIMIT);
 
     try {
       window.localStorage.setItem(SAVED_BIDS_KEY, JSON.stringify(nextSavedBids));
       setSavedBids(nextSavedBids);
+    } catch {
+      showSaveNotice("관심공고를 브라우저에 저장하지 못했습니다.");
+      return;
+    }
+
+    if (!feedbackEnabled || !favoriteSearchId) {
       showSaveNotice(
         alreadySaved
           ? "관심공고에서 해제했습니다."
           : "관심공고에 저장했습니다.",
       );
+      return;
+    }
+
+    setFeedbackSubmittingId(bid.id);
+    try {
+      const data = await postRecommendationFeedback(
+        bid,
+        alreadySaved ? "clear" : "positive",
+        "",
+        "favorite",
+        favoriteSearchId,
+      );
+      const currentFeedbackSource = (
+        resultBids.find((item) => item.id === bid.id)?.sessionFeedbackSource
+        || (selected?.id === bid.id ? selected.sessionFeedbackSource : null)
+        || bid.sessionFeedbackSource
+      );
+      if (currentFeedbackSource !== "detail") {
+        const nextFeedback = alreadySaved ? null : "positive";
+        const nextAdjustment = alreadySaved ? 0 : 3;
+        setResultBids((current) => current.map((item) => item.id === bid.id
+          ? {
+              ...item,
+              sessionFeedback: nextFeedback,
+              sessionFeedbackSource: alreadySaved ? null : "favorite",
+              feedbackAdjustment: nextAdjustment,
+            }
+          : item));
+        setSelected((current) => current?.id === bid.id
+          ? {
+              ...current,
+              sessionFeedback: nextFeedback,
+              sessionFeedbackSource: alreadySaved ? null : "favorite",
+              feedbackAdjustment: nextAdjustment,
+            }
+          : current);
+      }
+      showSaveNotice(
+        data.message
+        ?? (alreadySaved
+          ? "관심공고에서 해제했습니다."
+          : "관심공고에 저장하고 추천 가산점을 반영했습니다."),
+      );
     } catch {
-      showSaveNotice("관심공고를 브라우저에 저장하지 못했습니다.");
+      showSaveNotice(
+        alreadySaved
+          ? "관심공고는 해제했으며 추천 가산점은 세션 만료 후 사라집니다."
+          : "관심공고는 저장했지만 추천 가산점은 반영하지 못했습니다.",
+      );
+    } finally {
+      setFeedbackSubmittingId("");
     }
   };
 
@@ -1169,40 +1370,33 @@ export default function Home() {
           <span className="logo-symbol" aria-hidden="true">
             <svg viewBox="0 0 40 40" focusable="false">
               <defs>
-                <linearGradient id="findbid-logo-gradient" x1="5" y1="3" x2="35" y2="37">
-                  <stop offset="0" stopColor="#5ea2ff" />
-                  <stop offset="0.48" stopColor="#2f73ec" />
-                  <stop offset="1" stopColor="#1645bd" />
+                <linearGradient id="findbid-fb-gradient" x1="5" y1="5" x2="22" y2="35">
+                  <stop offset="0" stopColor="#66b5ff" />
+                  <stop offset="0.52" stopColor="#347bed" />
+                  <stop offset="1" stopColor="#1d4fd1" />
                 </linearGradient>
-                <linearGradient id="findbid-lens-gradient" x1="20" y1="20" x2="31" y2="31">
-                  <stop offset="0" stopColor="#e7f6ff" />
-                  <stop offset="1" stopColor="#8edcff" />
+                <linearGradient id="findbid-fb-b-gradient" x1="18" y1="6" x2="36" y2="34">
+                  <stop offset="0" stopColor="#2f75ee" />
+                  <stop offset="0.52" stopColor="#225bd8" />
+                  <stop offset="1" stopColor="#173b9d" />
+                </linearGradient>
+                <linearGradient id="findbid-fb-gold" x1="16" y1="15" x2="23" y2="23">
+                  <stop offset="0" stopColor="#ffe8a6" />
+                  <stop offset="0.5" stopColor="#dfad42" />
+                  <stop offset="1" stopColor="#a66a08" />
                 </linearGradient>
               </defs>
-              <rect
-                className="logo-tile"
-                x="1"
-                y="1"
-                width="38"
-                height="38"
-                rx="11"
-                fill="url(#findbid-logo-gradient)"
+              <path
+                className="logo-monogram-f"
+                d="M5.5 34V6h17.8v5.2H11.1v6.2h10.7v5.1H11.1V34H5.5Z"
               />
               <path
-                className="logo-tile-highlight"
-                d="M8 3.5h20.5A8 8 0 0 1 36.5 11"
+                className="logo-monogram-b"
+                fillRule="evenodd"
+                d="M17.8 6h9c5.4 0 8.7 2.8 8.7 7.1 0 2.8-1.5 5-4.1 6.1 3.2 1 5.1 3.4 5.1 6.8 0 5-3.8 8-9.5 8h-9.2V6Zm5.4 4.7v6.2h3.5c2.3 0 3.6-1.2 3.6-3.1s-1.4-3.1-3.7-3.1h-3.4Zm0 10.6v7.9h4c2.6 0 4.1-1.4 4.1-3.9s-1.6-4-4.2-4h-3.9Z"
               />
-              <text className="logo-bid-mark" x="6.7" y="21.4">Bid</text>
-              <circle
-                className="logo-lens"
-                cx="25.3"
-                cy="25.1"
-                r="5.1"
-                fill="rgba(18, 61, 149, 0.56)"
-                stroke="url(#findbid-lens-gradient)"
-              />
-              <path className="logo-lens-handle" d="m29.1 28.9 3.6 3.6" />
-              <circle className="logo-lens-glint" cx="23.6" cy="23.4" r="1" />
+              <path className="logo-monogram-cut" d="M18.4 11.2h4.8v6.2h-4.8zM18.4 22.4h4.8v6.8h-4.8z" />
+              <path className="logo-monogram-diamond" d="m20.5 15.7 3.6 3.6-3.6 3.6-3.6-3.6 3.6-3.6Z" />
             </svg>
           </span>
           <span className="logo-copy">
@@ -1215,13 +1409,27 @@ export default function Home() {
         </a>
 
         <nav className="main-nav" aria-label="주요 메뉴">
-          <a className="active" href="#search">입찰 탐색</a>
-          <button type="button" onClick={() => setSavedBidsOpen(true)}>
-            관심 공고
-            <em>{saved.length}</em>
-          </button>
-          <a href="#insight">인사이트</a>
-          <a href="#alerts">알림</a>
+          <a className="active" href="#search">
+            <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="5.5" />
+              <path d="m15 15 4.5 4.5" />
+            </svg>
+            입찰 탐색
+          </a>
+          <a href="#insight">
+            <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 19V11M12 19V5M19 19v-8" />
+              <path d="m4 8 5-4 4 4 6-5" />
+            </svg>
+            인사이트
+          </a>
+          <a href="#alerts">
+            <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
+              <path d="M10 21h4" />
+            </svg>
+            알림
+          </a>
         </nav>
 
         <div className="top-actions">
@@ -1235,7 +1443,16 @@ export default function Home() {
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
             aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
           >
-            <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+            {theme === "dark" ? (
+              <svg className="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" />
+              </svg>
+            ) : (
+              <svg className="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
+              </svg>
+            )}
           </button>
           <button
             className="icon-button saved-bids-header-button"
@@ -1244,7 +1461,16 @@ export default function Home() {
             aria-label={`관심공고 ${saved.length}건 보기`}
             title="관심공고 보기"
           >
-            <span aria-hidden="true">{saved.length > 0 ? "◆" : "◇"}</span>
+            <svg
+              className="saved-bids-cart-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path className="cart-outline" d="M1 3.5h3.2l1.6 12h13.4L21.5 5.5" />
+              <path className="cart-diamond" d="m12.7 1.2 6.5 6.5-6.5 6.5-6.5-6.5 6.5-6.5Z" />
+              <circle cx="7.5" cy="20" r="1.3" />
+              <circle cx="18" cy="20" r="1.3" />
+            </svg>
             {saved.length > 0 && (
               <i aria-hidden="true">
                 {saved.length > 99 ? "99+" : saved.length}
@@ -1400,56 +1626,60 @@ export default function Home() {
               </button>
             </div>
             <div className="parsed-intent">
-              <span className="intent-label">AI가 이해한 조건</span>
-              {semanticQuery.trim() ? (
-                !semanticQueryActive ? (
-                  <span>입력 문장은 아직 검색에 적용되지 않았습니다.</span>
-                ) : interpretedConditions.length > 0 ? (
-                  interpretedConditions.map((condition) => (
-                    <span
-                      key={condition}
-                      className={condition.startsWith("제외:") ? "exclude" : undefined}
-                    >
-                      {condition}
-                    </span>
-                  ))
-                ) : (
-                  <span>문장 전체 의미로 검색</span>
-                )
-              ) : (
-                <span>자연어 검색어를 입력해 주세요.</span>
-              )}
-              {semanticQueryActive && semanticEngine && (
-                <span title={`사용 모델: ${semanticEngine}`}>의미 벡터 적용</span>
-              )}
-            </div>
-            {searchTrace.length > 0 && (
-              <div className="search-trace">
-                <button
-                  type="button"
-                  className="search-trace-toggle"
-                  aria-expanded={searchTraceOpen}
-                  aria-controls="search-trace-panel"
-                  onClick={() => setSearchTraceOpen((open) => !open)}
-                >
-                  <span>검색 과정 보기</span>
-                  <small>
-                    {searchElapsedMs.toLocaleString("ko-KR")}ms
-                    {searchTraceId && ` · ${searchTraceId}`}
-                  </small>
-                  <span aria-hidden="true">{searchTraceOpen ? "−" : "+"}</span>
-                </button>
-                {searchTraceOpen && (
-                  <div id="search-trace-panel" className="search-trace-panel">
-                    <ol>
-                      {searchTrace.map((entry, index) => (
-                        <li key={`${index}-${entry}`}>{entry}</li>
-                      ))}
-                    </ol>
-                  </div>
+              <div className="intent-heading">
+                <span className="intent-label">AI가 이해한 조건</span>
+                {searchTrace.length > 0 && (
+                  <button
+                    type="button"
+                    className="search-trace-toggle"
+                    aria-expanded={searchTraceOpen}
+                    aria-controls="search-trace-panel"
+                    title={
+                      searchTraceId
+                        ? `검색 과정 보기 · ${searchElapsedMs.toLocaleString("ko-KR")}ms · ${searchTraceId}`
+                        : `검색 과정 보기 · ${searchElapsedMs.toLocaleString("ko-KR")}ms`
+                    }
+                    onClick={() => setSearchTraceOpen((open) => !open)}
+                  >
+                    <span>검색 과정 보기</span>
+                    <small>{searchElapsedMs.toLocaleString("ko-KR")}ms</small>
+                    <span aria-hidden="true">{searchTraceOpen ? "−" : "+"}</span>
+                  </button>
                 )}
               </div>
-            )}
+              <div className="intent-values">
+                {semanticQuery.trim() ? (
+                  !semanticQueryActive ? (
+                    <span>입력 문장은 아직 검색에 적용되지 않았습니다.</span>
+                  ) : interpretedConditions.length > 0 ? (
+                    interpretedConditions.map((condition) => (
+                      <span
+                        key={condition}
+                        className={condition.startsWith("제외:") ? "exclude" : undefined}
+                      >
+                        {condition}
+                      </span>
+                    ))
+                  ) : (
+                    <span>문장 전체 의미로 검색</span>
+                  )
+                ) : (
+                  <span>자연어 검색어를 입력해 주세요.</span>
+                )}
+                {semanticQueryActive && semanticEngine && (
+                  <span title={`사용 모델: ${semanticEngine}`}>의미 벡터 적용</span>
+                )}
+              </div>
+              {searchTrace.length > 0 && searchTraceOpen && (
+                <div id="search-trace-panel" className="search-trace-panel">
+                  <ol>
+                    {searchTrace.map((entry, index) => (
+                      <li key={`${index}-${entry}`}>{entry}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -1530,7 +1760,7 @@ export default function Home() {
               </select>
             </div>
             <div>
-              <label htmlFor="budget">사업금액</label>
+              <label htmlFor="budget">사업금액(VAT별도)</label>
               <select
                 id="budget"
                 value={maxBudget}
@@ -1816,7 +2046,7 @@ export default function Home() {
                       <button
                         type="button"
                         className={`bookmark ${saved.includes(bid.id) ? "saved" : ""}`}
-                        onClick={() => toggleSaved(bid)}
+                        onClick={() => void toggleSaved(bid)}
                         aria-label={saved.includes(bid.id) ? "관심 공고 해제" : "관심 공고 저장"}
                       >
                         {saved.includes(bid.id) ? "◆" : "◇"}
@@ -1834,7 +2064,7 @@ export default function Home() {
                         <AgencyName bidId={bid.id} name={bid.demandAgency} />
                       </div>
                       <div>
-                        <span>사업금액</span>
+                        <span>사업금액(VAT별도)</span>
                         <strong>{bid.budgetLabel}</strong>
                       </div>
                       <div>
@@ -1867,6 +2097,7 @@ export default function Home() {
                         </div>
                       )}
                     </div>
+
                   </div>
                   <div className="bid-deadline">
                     <span>입찰 마감</span>
@@ -2034,7 +2265,7 @@ export default function Home() {
                 <strong>{noticeDetail.demandAgency}</strong>
               </div>
               <div>
-                <span>사업금액</span>
+                <span>사업금액(VAT별도)</span>
                 <strong>{noticeDetail.budgetLabel}</strong>
               </div>
               <div>
@@ -2097,7 +2328,7 @@ export default function Home() {
               <button
                 className="secondary-action"
                 type="button"
-                onClick={() => toggleSaved(noticeDetail)}
+                onClick={() => void toggleSaved(noticeDetail)}
               >
                 {saved.includes(noticeDetail.id) ? "◆ 관심공고 저장됨" : "◇ 관심공고 저장"}
               </button>
@@ -2115,7 +2346,7 @@ export default function Home() {
           onMouseDown={() => setSelected(null)}
         >
           <aside
-            className="detail-drawer"
+            className={`detail-drawer${feedbackBidId === selected.id ? " feedback-expanded" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label="AI 입찰공고 상세 분석"
@@ -2160,7 +2391,7 @@ export default function Home() {
 
             <div className="drawer-grid">
               <div>
-                <span>사업금액</span>
+                <span>사업금액(VAT별도)</span>
                 <strong>{selected.budgetLabel}</strong>
               </div>
               <div>
@@ -2246,11 +2477,106 @@ export default function Home() {
               </ul>
             </section>
 
+            {feedbackEnabled && (
+              <section
+                className="analysis-section analysis-feedback"
+                aria-labelledby={`analysis-feedback-title-${selected.id}`}
+              >
+                <div className="analysis-feedback-head">
+                  <div>
+                    <span className="dot good" />
+                    <h3 id={`analysis-feedback-title-${selected.id}`}>
+                      추천 결과 피드백
+                    </h3>
+                  </div>
+                  {selected.sessionFeedbackSource === "favorite" && (
+                    <small>관심공고 선택으로 +3점 반영 중</small>
+                  )}
+                </div>
+                <p>공고 내용을 확인한 결과가 우리 회사에 적합한지 알려주세요.</p>
+                <div className="bid-feedback-actions">
+                  <button
+                    type="button"
+                    className={selected.sessionFeedback === "positive" ? "active positive" : ""}
+                    disabled={feedbackSubmittingId === selected.id}
+                    onClick={() => void submitRecommendationFeedback(selected, "positive")}
+                  >
+                    추천 적합
+                  </button>
+                  <button
+                    type="button"
+                    className={selected.sessionFeedback === "negative" ? "active negative" : ""}
+                    disabled={feedbackSubmittingId === selected.id}
+                    aria-expanded={feedbackBidId === selected.id}
+                    onClick={() => setFeedbackBidId((current) =>
+                      current === selected.id ? "" : selected.id,
+                    )}
+                  >
+                    추천 부적합
+                  </button>
+                  {selected.sessionFeedbackSource === "detail" && (
+                    <button
+                      type="button"
+                      className="feedback-clear"
+                      disabled={feedbackSubmittingId === selected.id}
+                      onClick={() => void submitRecommendationFeedback(selected, "clear")}
+                    >
+                      상세평가 취소
+                    </button>
+                  )}
+                  {selected.sessionFeedbackSource === "detail"
+                    && Boolean(selected.feedbackAdjustment) && (
+                    <small>
+                      상세평가 보정 {Number(selected.feedbackAdjustment) > 0 ? "+" : ""}
+                      {selected.feedbackAdjustment}점
+                    </small>
+                  )}
+                </div>
+                {feedbackBidId === selected.id && (
+                  <div
+                    className="feedback-reason-panel"
+                    role="group"
+                    aria-label={`${selected.title} 추천 부적합 사유`}
+                  >
+                    <strong>부적합 사유를 선택해 주세요.</strong>
+                    <div>
+                      {feedbackReasons.map((reason) => (
+                        <button
+                          type="button"
+                          key={reason}
+                          disabled={feedbackSubmittingId === selected.id}
+                          onClick={() => void submitRecommendationFeedback(
+                            selected,
+                            "negative",
+                            reason,
+                          )}
+                        >
+                          {reason}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="feedback-exclude"
+                      disabled={feedbackSubmittingId === selected.id}
+                      onClick={() => void submitRecommendationFeedback(
+                        selected,
+                        "exclude",
+                        "이미 확인한 공고",
+                      )}
+                    >
+                      이 공고를 현재 세션에서 제외
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+
             <div className="drawer-actions">
               <button
                 className="secondary-action"
                 type="button"
-                onClick={() => toggleSaved(selected)}
+                onClick={() => void toggleSaved(selected)}
               >
                 {saved.includes(selected.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
               </button>
@@ -2322,7 +2648,7 @@ export default function Home() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => toggleSaved(bid)}
+                          onClick={() => void toggleSaved(bid)}
                           aria-label={`${bid.title} 관심공고 해제`}
                           title="관심공고 해제"
                         >
@@ -2345,7 +2671,7 @@ export default function Home() {
                           <strong>{bid.demandAgency}</strong>
                         </span>
                         <span>
-                          사업금액
+                          사업금액(VAT별도)
                           <strong>{bid.budgetLabel}</strong>
                         </span>
                         <span className="saved-bid-fact-region">
@@ -2554,7 +2880,7 @@ export default function Home() {
                 </select>
               </div>
               <div className="profile-field">
-                <label htmlFor="profile-budget">선호 최대 사업금액</label>
+                <label htmlFor="profile-budget">선호 최대 사업금액(VAT별도)</label>
                 <div className="profile-budget-input">
                   <input
                     id="profile-budget"

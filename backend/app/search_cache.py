@@ -13,7 +13,7 @@ from findbid_shared.schemas import SearchRequest
 
 
 logger = logging.getLogger(__name__)
-SEARCH_ALGORITHM_VERSION = 16
+SEARCH_ALGORITHM_VERSION = 18
 
 
 @lru_cache

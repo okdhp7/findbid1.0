@@ -6,6 +6,11 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.agent.orchestrator import describe_search_intent
+from app.feedback import (
+    apply_feedback_adjustments,
+    feedback_store,
+    search_fingerprint,
+)
 from app.knowledge import analyze_query
 from app.repositories import BidRepository, ExternalBidRepository
 from app.search_cache import (
@@ -14,6 +19,7 @@ from app.search_cache import (
 )
 from app.semantic import get_semantic_search_engine
 from findbid_shared.config import get_settings
+from findbid_shared.recommendation_versions import recommendation_versions
 from findbid_shared.schemas.bid import (
     BidRecord,
     QueryPlan,
@@ -32,9 +38,11 @@ class SearchService:
             else BidRepository(session)
         )
 
-    def search(self, request: SearchRequest) -> SearchResponse:
+    def search(self, request: SearchRequest, session_id: str = "") -> SearchResponse:
         started_at = perf_counter()
         search_id = uuid4().hex[:12]
+        fingerprint = search_fingerprint(request)
+        feedback_enabled = feedback_store().is_enabled()
         analysis = analyze_query(request.semantic_query)
         trace: list[str] = [
             f"검색 시작: {request.semantic_query or '상세조건 검색'}",
@@ -131,6 +139,26 @@ class SearchService:
             else:
                 trace.append("검색 결과 캐시: 적중")
 
+            session_feedback = (
+                feedback_store().get_feedback(session_id, fingerprint)
+                if feedback_enabled
+                else {}
+            )
+            records, feedback_applied = apply_feedback_adjustments(
+                records,
+                session_feedback,
+                get_settings().feedback_adjustment_limit,
+            )
+            if feedback_applied:
+                total = len(records)
+                average_score = (
+                    round(sum(item.score for item in records) / len(records))
+                    if records
+                    else 0
+                )
+                trace.append(
+                    f"세션 피드백 재순위화: {len(session_feedback):,}건 반영"
+                )
             start = (request.page - 1) * request.limit
             items = records[start : start + request.limit]
         else:
@@ -155,6 +183,28 @@ class SearchService:
             )
             eligible_total = self.repository.count_search(eligible_request)
             closing_soon_total = self.repository.count_search(closing_request)
+            session_feedback = (
+                feedback_store().get_feedback(session_id, fingerprint)
+                if feedback_enabled
+                else {}
+            )
+            items, feedback_applied = apply_feedback_adjustments(
+                items,
+                session_feedback,
+                get_settings().feedback_adjustment_limit,
+            )
+            if feedback_applied:
+                trace.append(
+                    f"세션 피드백 재순위화: {len(session_feedback):,}건 반영"
+                )
+
+        if feedback_enabled:
+            feedback_store().save_impression(
+                session_id,
+                search_id,
+                fingerprint,
+                items,
+            )
 
         trace.append(f"최종 결과: {total:,}건")
         elapsed_ms = round((perf_counter() - started_at) * 1000)
@@ -234,6 +284,10 @@ class SearchService:
                 search_id=search_id,
                 search_trace=trace,
                 elapsed_ms=elapsed_ms,
+                search_fingerprint=fingerprint,
+                feedback_applied=feedback_applied,
+                feedback_enabled=feedback_enabled,
+                versions=recommendation_versions(),
             ),
             database_total=database_total,
             total=total,

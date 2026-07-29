@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, agent, bids, company, health, search
+from app.api.routes import admin, agent, bids, company, feedback, health, search
 from app.data import DEMO_BIDS
 from app.database import SessionLocal, initialize_database
 from app.repositories import BidRepository
@@ -40,6 +40,7 @@ app.add_middleware(
 prefix = "/api/v1"
 app.include_router(health.router, prefix=prefix)
 app.include_router(search.router, prefix=prefix)
+app.include_router(feedback.router, prefix=prefix)
 app.include_router(bids.router, prefix=prefix)
 app.include_router(company.router, prefix=prefix)
 app.include_router(agent.router, prefix=prefix)

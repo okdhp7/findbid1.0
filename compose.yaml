@@ -23,6 +23,8 @@ services:
       - "${FINDBID_PORT:-3100}:3000"
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
+      FINDBID_ADMIN_PASSWORD: ${FINDBID_ADMIN_PASSWORD:-findbid2026}
     depends_on:
       backend:
         condition: service_healthy
@@ -60,6 +62,7 @@ services:
       OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
+      ADMIN_PASSWORD: ${FINDBID_ADMIN_PASSWORD:-findbid2026}
       DEMO_MODE: ${DEMO_MODE:-true}
       SEMANTIC_SEARCH_ENABLED: ${SEMANTIC_SEARCH_ENABLED:-true}
       SEMANTIC_MODEL_NAME: ${SEMANTIC_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
@@ -70,6 +73,8 @@ services:
       SEMANTIC_CANDIDATE_LIMIT: ${SEMANTIC_CANDIDATE_LIMIT:-5000}
       SEMANTIC_RESULT_CACHE_SECONDS: ${SEMANTIC_RESULT_CACHE_SECONDS:-120}
       SEARCH_TRACE_ENABLED: ${SEARCH_TRACE_ENABLED:-true}
+      FEEDBACK_SESSION_TTL_SECONDS: ${FEEDBACK_SESSION_TTL_SECONDS:-7200}
+      FEEDBACK_ADJUSTMENT_LIMIT: ${FEEDBACK_ADJUSTMENT_LIMIT:-10}
     volumes:
       - embedding-model-cache:/home/findbid/.cache/fastembed
     depends_on:
