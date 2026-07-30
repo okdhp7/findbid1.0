@@ -194,6 +194,12 @@ test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다
   assert.match(page, /function normalizeSavedBids\(value: unknown\): Bid\[\]/);
   assert.match(page, /const toggleSaved = async \(bid: Bid\) =>/);
   assert.match(page, /const \[savedBidsOpen, setSavedBidsOpen\] = useState\(false\)/);
+  assert.match(page, /const \[clearingSavedBids, setClearingSavedBids\] = useState\(false\)/);
+  assert.match(page, /const clearSavedBids = async \(\) =>/);
+  assert.match(page, /window\.confirm\(/);
+  assert.match(page, /window\.localStorage\.removeItem\(SAVED_BIDS_KEY\)/);
+  assert.match(page, /className="saved-bids-clear-all"/);
+  assert.match(page, /\{clearingSavedBids \? "삭제 중…" : "전체 삭제"\}/);
   assert.doesNotMatch(page, /id="saved"/);
   assert.match(page, /aria-labelledby="saved-bids-title"/);
   assert.match(page, /aria-label=\{`관심공고 \$\{saved\.length\}건 보기`\}/);
@@ -222,6 +228,7 @@ test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다
   assert.match(css, /\.app-shell \.saved-bids-modal-content/);
   assert.match(css, /\.app-shell \.saved-bids-list/);
   assert.match(css, /\.app-shell \.saved-bid-card/);
+  assert.match(css, /\.app-shell \.saved-bids-clear-all/);
   assert.match(css, /\.app-shell \.saved-bid-meta \.saved-bid-score-badge/);
   assert.match(css, /\.mobile-dock em/);
   assert.match(css, /\.saved-bids-header-button i/);
@@ -488,11 +495,11 @@ test("공고 카드에 일치 역량과 속성 검색조건을 구분해 표시�
   const matchedLabelStyle = css.match(
     /\.app-shell \.match-label\s*\{([^}]*)\}/,
   )?.[1] ?? "";
-  assert.match(matchedLabelStyle, /color:\s*var\(--accent\)/);
+  assert.match(matchedLabelStyle, /color:\s*var\(--muted\)/);
   assert.match(matchedLabelStyle, /font-weight:\s*400/);
   assert.match(matchedItemStyle, /background:\s*transparent/);
   assert.match(matchedItemStyle, /border:\s*0/);
-  assert.match(matchedItemStyle, /color:\s*var\(--accent\)/);
+  assert.match(matchedItemStyle, /color:\s*var\(--muted\)/);
   assert.match(matchedItemStyle, /font-size:\s*11px/);
   assert.match(matchedItemStyle, /font-weight:\s*600/);
   assert.match(matchedItemStyle, /padding:\s*0/);
@@ -552,29 +559,16 @@ test("요약 카드의 값과 단위는 축소된 글자 크기를 사용한다"
   assert.match(css, /@media[\s\S]*?\.app-shell \.metrics strong\s*\{[\s\S]*?font-size:\s*20px/);
 });
 
-test("FindBid 로고는 배경 없는 FB 모노그램 SVG 워드마크를 사용한다", async () => {
+test("FindBid 로고는 투명 배경의 B 모노그램 PNG 워드마크를 사용한다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(page, /id="findbid-fb-gradient"/);
-  assert.match(page, /id="findbid-fb-b-gradient"/);
-  assert.match(page, /id="findbid-fb-gold"/);
-  assert.match(page, /className="logo-monogram-f"/);
-  assert.match(page, /className="logo-monogram-b"/);
-  assert.match(page, /className="logo-monogram-diamond"/);
-  assert.doesNotMatch(page, /className="logo-tile"/);
-  assert.doesNotMatch(page, /className="logo-lens"/);
-  assert.doesNotMatch(page, /className="logo-bid-mark"/);
+  assert.match(page, /<img src="\/findbid-b-icon\.png" alt="" \/>/);
   assert.match(page, /className="word-find">Find/);
   assert.match(page, /className="word-bid">Bid/);
   assert.match(page, /AI Bid Searcher/);
-  assert.doesNotMatch(page, /<span className="logo-symbol">F<\/span>/);
-  assert.doesNotMatch(page, /className="logo-f"/);
-  assert.doesNotMatch(page, /className="logo-gavel"/);
-  assert.match(css, /\.app-shell \.logo-monogram-f/);
-  assert.match(css, /\.app-shell \.logo-monogram-b/);
-  assert.match(css, /\.app-shell \.logo-monogram-diamond/);
-  assert.doesNotMatch(css, /\.app-shell \.logo-symbol::after/);
+  assert.doesNotMatch(page, /id="findbid-fb-gradient"/);
+  assert.match(css, /\.app-shell \.logo-symbol img/);
   assert.match(css, /\.app-shell \.word-bid/);
   assert.match(css, /background-clip:\s*text/);
 });

@@ -608,6 +608,7 @@ export default function Home() {
   const [noticeDetailError, setNoticeDetailError] = useState("");
   const [savedBids, setSavedBids] = useState<Bid[]>([]);
   const [savedBidsOpen, setSavedBidsOpen] = useState(false);
+  const [clearingSavedBids, setClearingSavedBids] = useState(false);
   const [feedbackBidId, setFeedbackBidId] = useState("");
   const [feedbackSubmittingId, setFeedbackSubmittingId] = useState("");
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
@@ -1341,6 +1342,69 @@ export default function Home() {
     }
   };
 
+  const clearSavedBids = async () => {
+    if (savedBids.length === 0 || clearingSavedBids) return;
+
+    const confirmed = window.confirm(
+      `관심공고 ${savedBids.length.toLocaleString("ko-KR")}건을 모두 삭제할까요?\n삭제한 관심공고는 복구할 수 없습니다.`,
+    );
+    if (!confirmed) return;
+
+    const bidsToClear = [...savedBids];
+    const savedBidIds = new Set(bidsToClear.map((bid) => bid.id));
+    const clearFavoriteFeedback = (bid: Bid): Bid => (
+      savedBidIds.has(bid.id) && bid.sessionFeedbackSource === "favorite"
+        ? {
+            ...bid,
+            sessionFeedback: null,
+            sessionFeedbackSource: null,
+            feedbackAdjustment: 0,
+          }
+        : bid
+    );
+
+    setClearingSavedBids(true);
+    try {
+      window.localStorage.removeItem(SAVED_BIDS_KEY);
+      setSavedBids([]);
+      setResultBids((current) => current.map(clearFavoriteFeedback));
+      setSelected((current) => current ? clearFavoriteFeedback(current) : current);
+      setNoticeDetail((current) => current ? clearFavoriteFeedback(current) : current);
+    } catch {
+      setClearingSavedBids(false);
+      showSaveNotice("관심공고 전체 삭제에 실패했습니다.");
+      return;
+    }
+
+    const feedbackTargets = feedbackEnabled
+      ? bidsToClear.filter((bid) => Boolean(bid.favoriteSearchId))
+      : [];
+
+    if (feedbackTargets.length === 0) {
+      setClearingSavedBids(false);
+      showSaveNotice("관심공고를 모두 삭제했습니다.");
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      feedbackTargets.map((bid) => postRecommendationFeedback(
+        bid,
+        "clear",
+        "",
+        "favorite",
+        bid.favoriteSearchId,
+      )),
+    );
+    const failedCount = results.filter((result) => result.status === "rejected").length;
+
+    setClearingSavedBids(false);
+    showSaveNotice(
+      failedCount > 0
+        ? `관심공고는 모두 삭제했으며 추천 가산점 ${failedCount}건은 세션 만료 후 사라집니다.`
+        : "관심공고를 모두 삭제하고 추천 가산점을 해제했습니다.",
+    );
+  };
+
   const openNoticeDetail = async (bid: Bid) => {
     setNoticeDetail(bid);
     setNoticeDetailLoading(true);
@@ -1485,6 +1549,16 @@ export default function Home() {
                 {/* <span className="beta">BETA</span> */}
               </div>
               <div className="search-head-actions">
+                <button
+                  type="button"
+                  className="semantic-input-clear"
+                  onClick={() => {
+                    setSemanticQuery("");
+                    prepareSemanticAnalysisState("");
+                  }}
+                >
+                  입력 지우기
+                </button>
                 <div className="semantic-history" ref={semanticHistoryRef}>
                   <button
                     type="button"
@@ -1539,16 +1613,6 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="semantic-input-clear"
-                  onClick={() => {
-                    setSemanticQuery("");
-                    prepareSemanticAnalysisState("");
-                  }}
-                >
-                  입력 지우기
-                </button>
               </div>
             </div>
             <div className="semantic-input">
@@ -2591,7 +2655,17 @@ export default function Home() {
                 <p>저장한 공고를 이 브라우저에서 다시 확인할 수 있습니다.</p>
               </div>
               {savedBids.length > 0 && (
-                <small>최대 {SAVED_BIDS_LIMIT}건 저장</small>
+                <div className="saved-bids-head-actions">
+                  <small>최대 {SAVED_BIDS_LIMIT}건 저장</small>
+                  <button
+                    type="button"
+                    className="saved-bids-clear-all"
+                    disabled={clearingSavedBids}
+                    onClick={() => void clearSavedBids()}
+                  >
+                    {clearingSavedBids ? "삭제 중…" : "전체 삭제"}
+                  </button>
+                </div>
               )}
             </div>
 
