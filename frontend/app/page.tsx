@@ -1368,36 +1368,7 @@ export default function Home() {
       <header className="topbar">
         <a className="logo" href="#top" aria-label="FindBid 홈">
           <span className="logo-symbol" aria-hidden="true">
-            <svg viewBox="0 0 40 40" focusable="false">
-              <defs>
-                <linearGradient id="findbid-fb-gradient" x1="5" y1="5" x2="22" y2="35">
-                  <stop offset="0" stopColor="#66b5ff" />
-                  <stop offset="0.52" stopColor="#347bed" />
-                  <stop offset="1" stopColor="#1d4fd1" />
-                </linearGradient>
-                <linearGradient id="findbid-fb-b-gradient" x1="18" y1="6" x2="36" y2="34">
-                  <stop offset="0" stopColor="#2f75ee" />
-                  <stop offset="0.52" stopColor="#225bd8" />
-                  <stop offset="1" stopColor="#173b9d" />
-                </linearGradient>
-                <linearGradient id="findbid-fb-gold" x1="16" y1="15" x2="23" y2="23">
-                  <stop offset="0" stopColor="#ffe8a6" />
-                  <stop offset="0.5" stopColor="#dfad42" />
-                  <stop offset="1" stopColor="#a66a08" />
-                </linearGradient>
-              </defs>
-              <path
-                className="logo-monogram-f"
-                d="M5.5 34V6h17.8v5.2H11.1v6.2h10.7v5.1H11.1V34H5.5Z"
-              />
-              <path
-                className="logo-monogram-b"
-                fillRule="evenodd"
-                d="M17.8 6h9c5.4 0 8.7 2.8 8.7 7.1 0 2.8-1.5 5-4.1 6.1 3.2 1 5.1 3.4 5.1 6.8 0 5-3.8 8-9.5 8h-9.2V6Zm5.4 4.7v6.2h3.5c2.3 0 3.6-1.2 3.6-3.1s-1.4-3.1-3.7-3.1h-3.4Zm0 10.6v7.9h4c2.6 0 4.1-1.4 4.1-3.9s-1.6-4-4.2-4h-3.9Z"
-              />
-              <path className="logo-monogram-cut" d="M18.4 11.2h4.8v6.2h-4.8zM18.4 22.4h4.8v6.8h-4.8z" />
-              <path className="logo-monogram-diamond" d="m20.5 15.7 3.6 3.6-3.6 3.6-3.6-3.6 3.6-3.6Z" />
-            </svg>
+            <img src="/findbid-b-icon.png" alt="" />
           </span>
           <span className="logo-copy">
             <strong>

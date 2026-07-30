@@ -189,34 +189,17 @@ a { color: inherit; text-decoration: none; }
   width: 40px;
 }
 
-.app-shell .logo-symbol svg {
+.app-shell .logo-symbol img {
+  border-radius: var(--radius-sm);
   display: block;
   height: 40px;
-  overflow: visible;
+  object-fit: cover;
   transition: transform 0.2s ease;
   width: 40px;
 }
 
-.app-shell .logo:hover .logo-symbol svg {
+.app-shell .logo:hover .logo-symbol img {
   transform: translateY(-1px) scale(1.025);
-}
-
-.app-shell .logo-monogram-f {
-  fill: url(#findbid-fb-gradient);
-}
-
-.app-shell .logo-monogram-b {
-  fill: url(#findbid-fb-b-gradient);
-  filter: drop-shadow(1px 1.5px 2px rgba(17, 47, 126, 0.2));
-}
-
-.app-shell .logo-monogram-cut {
-  fill: color-mix(in srgb, var(--panel-solid) 94%, transparent);
-}
-
-.app-shell .logo-monogram-diamond {
-  fill: url(#findbid-fb-gold);
-  filter: drop-shadow(0 1.5px 2px rgba(132, 82, 4, 0.26));
 }
 
 .app-shell .logo-copy {
