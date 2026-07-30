@@ -103,7 +103,18 @@ def apply_feedback_adjustments(
                 continue
 
             sign = 1 if feedback_type == "positive" else -1
-            reason = str(item.get("reason", ""))
+            stored_reasons = item.get("reasons")
+            reasons = (
+                [
+                    str(reason).strip()
+                    for reason in stored_reasons
+                    if str(reason).strip()
+                ]
+                if isinstance(stored_reasons, list)
+                else [str(item.get("reason", "")).strip()]
+            )
+            if not reasons:
+                reasons = [str(item.get("reason", "")).strip()]
             features = item.get("features")
             if not isinstance(features, dict):
                 continue
@@ -122,40 +133,41 @@ def apply_feedback_adjustments(
                     adjustment += 1
                 continue
 
-            if reason == "이미 확인한 공고":
-                continue
-            if reason == "계약방법이 맞지 않음":
-                if record.contract_method == features.get("contractMethod"):
-                    adjustment += 2 * sign
-                continue
-            if reason == "수요기관이 맞지 않음":
-                if record.demand_agency == features.get("demandAgency"):
-                    adjustment += 2 * sign
-                continue
-            if reason == "지역이 맞지 않음":
-                if record.region == features.get("region"):
-                    adjustment += 2 * sign
-                continue
-            if reason == "사업금액이 맞지 않음":
-                if _same_budget_band(record.budget, int(features.get("budget") or 0)):
-                    adjustment += 2 * sign
-                continue
-
             feature_tags = {
                 str(tag).strip().lower()
                 for tag in features.get("tags", [])
                 if str(tag).strip()
             }
             record_tags = {tag.strip().lower() for tag in record.tags if tag.strip()}
-            if feature_tags.intersection(record_tags):
-                adjustment += 2 * sign
-            if record.category == features.get("category"):
-                adjustment += sign
-            if (
-                feedback_type == "positive"
-                and record.contract_method == features.get("contractMethod")
-            ):
-                adjustment += sign
+            for reason in reasons:
+                if reason == "이미 확인한 공고":
+                    continue
+                if reason == "계약방법이 맞지 않음":
+                    if record.contract_method == features.get("contractMethod"):
+                        adjustment += 2 * sign
+                    continue
+                if reason == "수요기관이 맞지 않음":
+                    if record.demand_agency == features.get("demandAgency"):
+                        adjustment += 2 * sign
+                    continue
+                if reason == "지역이 맞지 않음":
+                    if record.region == features.get("region"):
+                        adjustment += 2 * sign
+                    continue
+                if reason == "사업금액이 맞지 않음":
+                    if _same_budget_band(record.budget, int(features.get("budget") or 0)):
+                        adjustment += 2 * sign
+                    continue
+
+                if feature_tags.intersection(record_tags):
+                    adjustment += 2 * sign
+                if record.category == features.get("category"):
+                    adjustment += sign
+                if (
+                    feedback_type == "positive"
+                    and record.contract_method == features.get("contractMethod")
+                ):
+                    adjustment += sign
 
         adjustment = max(-adjustment_limit, min(adjustment_limit, adjustment))
         adjusted.append(
@@ -332,8 +344,21 @@ class FeedbackStore:
                 ):
                     self.redis.hdel(key, request.bid_id)
             else:
-                reason = request.reason.strip()
-                if request.feedback_type == "negative" and reason not in FEEDBACK_REASONS:
+                reasons = list(dict.fromkeys(
+                    reason.strip()
+                    for reason in request.reasons
+                    if reason.strip()
+                ))
+                legacy_reason = request.reason.strip()
+                if not reasons and legacy_reason:
+                    reasons = [legacy_reason]
+                if (
+                    request.feedback_type == "negative"
+                    and (
+                        not reasons
+                        or any(reason not in FEEDBACK_REASONS for reason in reasons)
+                    )
+                ):
                     raise ValueError("부적합 사유를 선택해 주세요.")
                 if not (
                     request.source == "favorite"
@@ -345,7 +370,8 @@ class FeedbackStore:
                         json.dumps(
                             {
                                 "type": request.feedback_type,
-                                "reason": reason,
+                                "reason": reasons[0] if reasons else legacy_reason,
+                                "reasons": reasons,
                                 "source": request.source,
                                 "features": bids[request.bid_id],
                                 "updatedAt": int(time()),
@@ -381,9 +407,19 @@ class FeedbackStore:
                     feedback_type = str(item.get("type", ""))
                     if feedback_type in summary:
                         summary[feedback_type] += 1
-                    reason = str(item.get("reason", "")).strip()
-                    if reason:
-                        reasons[reason] = reasons.get(reason, 0) + 1
+                    stored_reasons = item.get("reasons")
+                    item_reasons = (
+                        [
+                            str(reason).strip()
+                            for reason in stored_reasons
+                            if str(reason).strip()
+                        ]
+                        if isinstance(stored_reasons, list)
+                        else [str(item.get("reason", "")).strip()]
+                    )
+                    for reason in item_reasons:
+                        if reason:
+                            reasons[reason] = reasons.get(reason, 0) + 1
             return {
                 "feedbackEnabled": self.is_enabled(),
                 "redis": {

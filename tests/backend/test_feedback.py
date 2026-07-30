@@ -166,6 +166,37 @@ def test_negative_reason_and_exclusion_are_session_scoped() -> None:
     assert by_id["another-limited"].feedback_adjustment == -2
 
 
+def test_multiple_negative_reasons_all_adjust_similar_bids() -> None:
+    source = _record(
+        "source",
+        score=80,
+        region="전국",
+        contract_method="제한경쟁",
+    )
+    similar = _record(
+        "similar",
+        score=79,
+        region="전국",
+        contract_method="제한경쟁",
+    )
+    feedback = {
+        "source": {
+            "type": "negative",
+            "reasons": ["지역이 맞지 않음", "계약방법이 맞지 않음"],
+            "features": {
+                "region": "전국",
+                "contractMethod": "제한경쟁",
+            },
+        },
+    }
+
+    ranked, _ = apply_feedback_adjustments([source, similar], feedback, 10)
+
+    by_id = {record.id: record for record in ranked}
+    assert by_id["source"].feedback_adjustment == -6
+    assert by_id["similar"].feedback_adjustment == -4
+
+
 class _SettingsRedis:
     def __init__(self) -> None:
         self.values: dict[tuple[str, str], str] = {}

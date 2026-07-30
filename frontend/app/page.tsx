@@ -67,6 +67,7 @@ const DEFAULT_SEARCH: SearchSnapshot = {
 };
 
 const PAGE_SIZE = 20;
+const PAGE_JUMP = 5;
 
 type SavedSearch = {
   id: string;
@@ -610,6 +611,8 @@ export default function Home() {
   const [savedBidsOpen, setSavedBidsOpen] = useState(false);
   const [clearingSavedBids, setClearingSavedBids] = useState(false);
   const [feedbackBidId, setFeedbackBidId] = useState("");
+  const [selectedFeedbackReasons, setSelectedFeedbackReasons] = useState<string[]>([]);
+  const [excludeConfirmOpen, setExcludeConfirmOpen] = useState(false);
   const [feedbackSubmittingId, setFeedbackSubmittingId] = useState("");
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
@@ -739,12 +742,16 @@ export default function Home() {
     if (!selected && !noticeDetail) return;
     const closeDrawerOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (excludeConfirmOpen) {
+        setExcludeConfirmOpen(false);
+        return;
+      }
       setSelected(null);
       setNoticeDetail(null);
     };
     window.addEventListener("keydown", closeDrawerOnEscape);
     return () => window.removeEventListener("keydown", closeDrawerOnEscape);
-  }, [selected, noticeDetail]);
+  }, [selected, noticeDetail, excludeConfirmOpen]);
 
   useEffect(() => {
     if (!semanticHistoryOpen) return;
@@ -908,7 +915,7 @@ export default function Home() {
   const postRecommendationFeedback = async (
     bid: Bid,
     feedbackType: "positive" | "negative" | "exclude" | "clear",
-    reason = "",
+    reasons: string[] = [],
     source: "favorite" | "detail" = "detail",
     searchId = searchTraceId,
   ) => {
@@ -925,7 +932,8 @@ export default function Home() {
         searchId,
         bidId: bid.id,
         feedbackType,
-        reason,
+        reason: reasons[0] ?? "",
+        reasons,
         source,
       }),
     });
@@ -939,14 +947,14 @@ export default function Home() {
   const submitRecommendationFeedback = async (
     bid: Bid,
     feedbackType: "positive" | "negative" | "exclude" | "clear",
-    reason = "",
+    reasons: string[] = [],
   ) => {
     setFeedbackSubmittingId(bid.id);
     try {
       const data = await postRecommendationFeedback(
         bid,
         feedbackType,
-        reason,
+        reasons,
         "detail",
       );
       let nextFeedback: Bid["sessionFeedback"] = (
@@ -968,7 +976,7 @@ export default function Home() {
         await postRecommendationFeedback(
           bid,
           "positive",
-          "",
+          [],
           "favorite",
           savedBids.find((item) => item.id === bid.id)?.favoriteSearchId
             || searchTraceId,
@@ -978,6 +986,7 @@ export default function Home() {
         nextAdjustment = 3;
       }
       setFeedbackBidId("");
+      setSelectedFeedbackReasons([]);
       showSaveNotice(data.message ?? "추천 피드백을 반영했습니다.");
       setSelected((current) => current?.id === bid.id
         ? {
@@ -1296,7 +1305,7 @@ export default function Home() {
       const data = await postRecommendationFeedback(
         bid,
         alreadySaved ? "clear" : "positive",
-        "",
+        [],
         "favorite",
         favoriteSearchId,
       );
@@ -1390,7 +1399,7 @@ export default function Home() {
       feedbackTargets.map((bid) => postRecommendationFeedback(
         bid,
         "clear",
-        "",
+        [],
         "favorite",
         bid.favoriteSearchId,
       )),
@@ -1537,7 +1546,7 @@ export default function Home() {
             <span>AI가 먼저 찾아드립니다.</span>
           </h1>
           <p>
-            검색 의도를 분석해 최적의 입찰공고를 탐색하여 분석정보와 함께 제공합니다.
+            인공지능이 검색 의도를 분석해 최적의 입찰공고를 탐색하여 분석정보와 함께 제공합니다.
           </p>
 
           {/* Semantic Search Card */}
@@ -2158,9 +2167,12 @@ export default function Home() {
                 type="button"
                 className="pagination-direction"
                 disabled={currentPage === 1}
-                onClick={() => runSearchNow(currentSearchSnapshot(), currentPage - 1)}
+                onClick={() => runSearchNow(
+                  currentSearchSnapshot(),
+                  Math.max(1, currentPage - PAGE_JUMP),
+                )}
               >
-                이전
+                이전 5페이지
               </button>
               {pageWindowStart > 1 && (
                 <>
@@ -2199,9 +2211,12 @@ export default function Home() {
                 type="button"
                 className="pagination-direction"
                 disabled={currentPage === totalPages}
-                onClick={() => runSearchNow(currentSearchSnapshot(), currentPage + 1)}
+                onClick={() => runSearchNow(
+                  currentSearchSnapshot(),
+                  Math.min(totalPages, currentPage + PAGE_JUMP),
+                )}
               >
-                다음
+                다음 5페이지
               </button>
             </nav>
           )}
@@ -2543,9 +2558,12 @@ export default function Home() {
                     className={selected.sessionFeedback === "negative" ? "active negative" : ""}
                     disabled={feedbackSubmittingId === selected.id}
                     aria-expanded={feedbackBidId === selected.id}
-                    onClick={() => setFeedbackBidId((current) =>
-                      current === selected.id ? "" : selected.id,
-                    )}
+                    onClick={() => {
+                      setSelectedFeedbackReasons([]);
+                      setFeedbackBidId((current) => {
+                        return current === selected.id ? "" : selected.id;
+                      });
+                    }}
                   >
                     추천 부적합
                   </button>
@@ -2573,35 +2591,50 @@ export default function Home() {
                     role="group"
                     aria-label={`${selected.title} 추천 부적합 사유`}
                   >
-                    <strong>부적합 사유를 선택해 주세요.</strong>
+                    <strong>부적합 사유를 모두 선택한 후 적용해 주세요.</strong>
                     <div>
                       {feedbackReasons.map((reason) => (
                         <button
                           type="button"
                           key={reason}
+                          className={selectedFeedbackReasons.includes(reason) ? "selected" : ""}
                           disabled={feedbackSubmittingId === selected.id}
-                          onClick={() => void submitRecommendationFeedback(
-                            selected,
-                            "negative",
-                            reason,
+                          aria-pressed={selectedFeedbackReasons.includes(reason)}
+                          onClick={() => setSelectedFeedbackReasons((current) =>
+                            current.includes(reason)
+                              ? current.filter((item) => item !== reason)
+                              : [...current, reason],
                           )}
                         >
                           {reason}
                         </button>
                       ))}
                     </div>
-                    <button
-                      type="button"
-                      className="feedback-exclude"
-                      disabled={feedbackSubmittingId === selected.id}
-                      onClick={() => void submitRecommendationFeedback(
-                        selected,
-                        "exclude",
-                        "이미 확인한 공고",
-                      )}
-                    >
-                      이 공고를 현재 세션에서 제외
-                    </button>
+                    <div className="feedback-reason-actions">
+                      <button
+                        type="button"
+                        className="feedback-exclude"
+                        disabled={feedbackSubmittingId === selected.id}
+                        onClick={() => setExcludeConfirmOpen(true)}
+                      >
+                        이 공고를 현재 세션에서 제외
+                      </button>
+                      <button
+                        type="button"
+                        className="feedback-apply"
+                        disabled={
+                          feedbackSubmittingId === selected.id
+                          || selectedFeedbackReasons.length === 0
+                        }
+                        onClick={() => void submitRecommendationFeedback(
+                          selected,
+                          "negative",
+                          selectedFeedbackReasons,
+                        )}
+                      >
+                        선택한 사유 적용 ({selectedFeedbackReasons.length})
+                      </button>
+                    </div>
                   </div>
                 )}
               </section>
@@ -2618,6 +2651,55 @@ export default function Home() {
               <OriginalNoticeAction bid={selected} />
             </div>
           </aside>
+        </div>
+      )}
+
+      {/* ── Exclude Bid Confirmation ── */}
+      {selected && excludeConfirmOpen && (
+        <div
+          className="modal-layer feedback-confirm-layer"
+          role="presentation"
+          onMouseDown={() => setExcludeConfirmOpen(false)}
+        >
+          <section
+            className="feedback-confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="feedback-confirm-title"
+            aria-describedby="feedback-confirm-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="feedback-confirm-icon" aria-hidden="true">!</div>
+            <h2 id="feedback-confirm-title">이 공고를 추천에서 제외할까요?</h2>
+            <p id="feedback-confirm-description">
+              현재 검색 세션의 추천 목록에서 이 공고가 제외됩니다.
+              다른 검색 세션이나 원본 공고에는 영향을 주지 않습니다.
+            </p>
+            <div className="feedback-confirm-actions">
+              <button
+                type="button"
+                className="feedback-confirm-cancel"
+                onClick={() => setExcludeConfirmOpen(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="feedback-confirm-submit"
+                disabled={feedbackSubmittingId === selected.id}
+                onClick={() => {
+                  setExcludeConfirmOpen(false);
+                  void submitRecommendationFeedback(
+                    selected,
+                    "exclude",
+                    ["이미 확인한 공고"],
+                  );
+                }}
+              >
+                제외
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

@@ -118,6 +118,7 @@ class FeedbackRequest(CamelModel):
     bid_id: str = Field(min_length=1, max_length=160)
     feedback_type: str = Field(pattern="^(positive|negative|exclude|clear)$")
     reason: str = Field(default="", max_length=80)
+    reasons: list[str] = Field(default_factory=list, max_length=9)
     source: str = Field(default="detail", pattern="^(favorite|detail)$")
 
 

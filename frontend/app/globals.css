@@ -2176,9 +2176,121 @@ a { color: inherit; text-decoration: none; }
   color: var(--accent);
 }
 
-.app-shell .feedback-reason-panel .feedback-exclude {
+.app-shell .feedback-reason-panel button.selected {
+  background: var(--accent-soft);
+  border-color: rgba(71, 121, 220, 0.4);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.app-shell .feedback-reason-panel .feedback-reason-actions {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.app-shell .feedback-reason-panel .feedback-reason-actions .feedback-apply {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  min-width: 176px;
+}
+
+.app-shell .feedback-reason-panel .feedback-reason-actions .feedback-apply:hover {
+  background: var(--accent-light);
+  border-color: var(--accent-light);
+  color: #fff;
+}
+
+.app-shell .feedback-reason-panel .feedback-reason-actions .feedback-apply:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-shell .feedback-reason-panel .feedback-reason-actions .feedback-exclude {
+  background: transparent;
+  border-color: transparent;
   color: var(--red);
-  margin-top: 8px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.app-shell .feedback-confirm-layer {
+  z-index: 120;
+}
+
+.app-shell .feedback-confirm-modal {
+  animation: modal-in 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+  max-width: 440px;
+  padding: 28px;
+  text-align: center;
+  width: 100%;
+}
+
+.app-shell .feedback-confirm-icon {
+  align-items: center;
+  background: rgba(239, 91, 112, 0.1);
+  border-radius: 50%;
+  color: var(--red);
+  display: inline-flex;
+  font-size: 20px;
+  font-weight: 800;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.app-shell .feedback-confirm-modal h2 {
+  color: var(--text);
+  font-size: 20px;
+  letter-spacing: -0.35px;
+  margin: 16px 0 10px;
+}
+
+.app-shell .feedback-confirm-modal p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.app-shell .feedback-confirm-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 24px;
+}
+
+.app-shell .feedback-confirm-actions button {
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 42px;
+}
+
+.app-shell .feedback-confirm-cancel {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.app-shell .feedback-confirm-submit {
+  background: var(--red);
+  border: 1px solid var(--red);
+  color: #fff;
+}
+
+.app-shell .feedback-confirm-submit:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .app-shell .analysis-section.analysis-feedback {
@@ -2277,6 +2389,16 @@ a { color: inherit; text-decoration: none; }
 }
 
 @media (max-width: 640px) {
+  .app-shell .feedback-reason-panel .feedback-reason-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .app-shell .feedback-reason-panel .feedback-reason-actions .feedback-apply,
+  .app-shell .feedback-reason-panel .feedback-reason-actions .feedback-exclude {
+    width: 100%;
+  }
+
   .app-shell .search-condition-group {
     border-left: 0;
     flex-basis: 100%;
@@ -2392,7 +2514,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .app-shell .pagination .pagination-direction {
-  min-width: 64px;
+  min-width: 94px;
 }
 
 .app-shell .pagination > span {

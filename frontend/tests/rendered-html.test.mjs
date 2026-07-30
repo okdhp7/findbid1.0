@@ -296,7 +296,14 @@ test("익명 세션 추천 피드백과 비밀번호 관리페이지를 제공�
   assert.match(page, /공고 내용을 확인한 결과가 우리 회사에 적합한지 알려주세요/);
   assert.match(page, /추천 적합/);
   assert.match(page, /추천 부적합/);
-  assert.match(page, /부적합 사유를 선택해 주세요/);
+  assert.match(page, /부적합 사유를 모두 선택한 후 적용해 주세요/);
+  assert.match(page, /selectedFeedbackReasons/);
+  assert.match(page, /선택한 사유 적용/);
+  assert.match(page, /reasons,/);
+  assert.match(page, /이 공고를 추천에서 제외할까요/);
+  assert.match(page, /다른 검색 세션이나 원본 공고에는 영향을 주지 않습니다/);
+  assert.match(page, /setExcludeConfirmOpen\(false\)/);
+  assert.match(css, /\.app-shell \.feedback-confirm-modal/);
   assert.match(page, /이 공고를 현재 세션에서 제외/);
   assert.match(page, /상세평가 취소/);
   assert.match(page, /postRecommendationFeedback\([\s\S]*?"favorite"/);
@@ -420,6 +427,16 @@ test("공고 카드에 전체 검색결과 기준 연번을 표시한다", async
   assert.match(sequenceStyle, /color:\s*var\(--muted\)/);
   assert.doesNotMatch(sequenceStyle, /\bbackground\s*:/);
   assert.doesNotMatch(sequenceStyle, /\bborder(?:-radius)?\s*:/);
+});
+
+test("페이지 이동 버튼은 5페이지 단위로 이동한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /const PAGE_JUMP = 5/);
+  assert.match(page, /Math\.max\(1, currentPage - PAGE_JUMP\)/);
+  assert.match(page, /Math\.min\(totalPages, currentPage \+ PAGE_JUMP\)/);
+  assert.match(page, /이전 5페이지/);
+  assert.match(page, /다음 5페이지/);
 });
 
 test("추천 공고 전체 개수에 건 단위를 함께 표시한다", async () => {
