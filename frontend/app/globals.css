@@ -4,31 +4,31 @@
    FINDBID PREMIUM DESIGN SYSTEM v3.0
    - 8pt grid spacing system
    - System sans-serif typography
-   - Deep navy + gold premium palette
+   - Neutral workspace + FindBid blue palette
    - Full responsive: 375px → 1920px
    ============================================================ */
 
 /* ── Design Tokens ── */
 :root {
   /* Core palette */
-  --ink:          #0d1b2a;
-  --ink-soft:     #2c4a5e;
-  --navy:         #0f2744;
-  --navy-mid:     #1a3a5c;
-  --navy-light:   #234e72;
-  --mint:         #00c896;
-  --mint-soft:    #e0f9f3;
-  --cream:        #f5f7fa;
+  --ink:          #171717;
+  --ink-soft:     #3f3f46;
+  --navy:         #315fc5;
+  --navy-mid:     #244aa1;
+  --navy-light:   #5f82cf;
+  --mint:         #16825d;
+  --mint-soft:    #eaf7f1;
+  --cream:        #f7f7f8;
   --paper:        #ffffff;
-  --line:         #e2e8f0;
-  --gold:         #c9973a;
-  --gold-light:   #f5d98a;
-  --warning:      #e07b2a;
-  --danger:       #d14f4f;
-  --shadow-sm:    0 2px 8px rgba(15, 39, 68, 0.08);
-  --shadow-md:    0 8px 24px rgba(15, 39, 68, 0.12);
-  --shadow-lg:    0 20px 60px rgba(15, 39, 68, 0.16);
-  --shadow-xl:    0 32px 80px rgba(15, 39, 68, 0.22);
+  --line:         #e5e5e5;
+  --gold:         #a86619;
+  --gold-light:   #f5deb7;
+  --warning:      #a86619;
+  --danger:       #c94a4a;
+  --shadow-sm:    0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-md:    0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-lg:    0 20px 60px rgba(0, 0, 0, 0.11);
+  --shadow-xl:    0 32px 80px rgba(0, 0, 0, 0.15);
   --radius-sm:    8px;
   --radius-md:    12px;
   --radius-lg:    16px;
@@ -77,37 +77,37 @@ a { color: inherit; text-decoration: none; }
    ============================================================ */
 .app-shell {
   /* Dark theme tokens */
-  --bg:           #080d18;
-  --bg-alt:       #0d1525;
-  --panel:        rgba(18, 26, 46, 0.92);
-  --panel-solid:  #111827;
-  --panel-soft:   rgba(255, 255, 255, 0.04);
-  --panel-hover:  rgba(255, 255, 255, 0.06);
-  --border:       rgba(255, 255, 255, 0.09);
-  --border-mid:   rgba(255, 255, 255, 0.14);
-  --border-strong:rgba(99, 160, 255, 0.28);
-  --text:         #e8edf5;
-  --text-soft:    #c5cfe0;
-  --muted:        #8a9ab8;
-  --dim:          #5e6e88;
-  --accent:       #4f8ef7;
-  --accent-light: #7aaeff;
-  --accent-deep:  #2563eb;
-  --accent-glow:  rgba(79, 142, 247, 0.22);
-  --green:        #10d98a;
-  --green-soft:   rgba(16, 217, 138, 0.12);
-  --red:          #f05252;
-  --red-soft:     rgba(240, 82, 82, 0.1);
-  --amber:        #f5a623;
-  --amber-soft:   rgba(245, 166, 35, 0.1);
-  --gold-accent:  #d4a843;
-  --shadow-card:  0 4px 16px rgba(0, 0, 0, 0.28);
-  --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
-  --shadow-panel: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --bg:           #212121;
+  --bg-alt:       #171717;
+  --panel:        rgba(47, 47, 47, 0.96);
+  --panel-solid:  #2f2f2f;
+  --panel-soft:   rgba(255, 255, 255, 0.06);
+  --panel-hover:  rgba(255, 255, 255, 0.09);
+  --border:       rgba(255, 255, 255, 0.1);
+  --border-mid:   rgba(255, 255, 255, 0.16);
+  --border-strong:rgba(125, 165, 255, 0.34);
+  --text:         #ececec;
+  --text-soft:    #d1d1d1;
+  --muted:        #b4b4b4;
+  --dim:          #737373;
+  --accent:       #5f8ff7;
+  --accent-light: #7da5ff;
+  --accent-deep:  #315fc5;
+  --accent-glow:  rgba(95, 143, 247, 0.18);
+  --green:        #34b27b;
+  --green-soft:   rgba(52, 178, 123, 0.13);
+  --red:          #ef6b6b;
+  --red-soft:     rgba(239, 107, 107, 0.12);
+  --amber:        #e8a84c;
+  --amber-soft:   rgba(232, 168, 76, 0.13);
+  --gold-accent:  #d4a65a;
+  --shadow-card:  0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.3);
+  --shadow-panel: 0 20px 60px rgba(0, 0, 0, 0.4);
 
   background:
-    radial-gradient(ellipse at 80% 0%, rgba(37, 99, 235, 0.14) 0%, transparent 50%),
-    radial-gradient(ellipse at 20% 100%, rgba(79, 142, 247, 0.06) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 0%, rgba(125, 165, 255, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 100%, rgba(255, 255, 255, 0.02) 0%, transparent 40%),
     var(--bg);
   color: var(--text);
   font-family: "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -117,37 +117,37 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Light Mode ── */
 .app-shell.light {
-  --bg:           #f0f4fc;
-  --bg-alt:       #e8edf8;
-  --panel:        rgba(255, 255, 255, 0.95);
+  --bg:           #ffffff;
+  --bg-alt:       #f7f7f8;
+  --panel:        rgba(255, 255, 255, 0.98);
   --panel-solid:  #ffffff;
-  --panel-soft:   rgba(37, 99, 235, 0.04);
-  --panel-hover:  rgba(37, 99, 235, 0.06);
-  --border:       rgba(30, 64, 175, 0.11);
-  --border-mid:   rgba(30, 64, 175, 0.18);
-  --border-strong:rgba(37, 99, 235, 0.32);
-  --text:         #0f1f3d;
-  --text-soft:    #2d4a6e;
-  --muted:        #5a7090;
-  --dim:          #8a9ab8;
-  --accent:       #2563eb;
-  --accent-light: #3b82f6;
-  --accent-deep:  #1d4ed8;
-  --accent-glow:  rgba(37, 99, 235, 0.16);
-  --green:        #059669;
-  --green-soft:   rgba(5, 150, 105, 0.1);
-  --red:          #dc2626;
-  --red-soft:     rgba(220, 38, 38, 0.08);
-  --amber:        #d97706;
-  --amber-soft:   rgba(217, 119, 6, 0.08);
-  --gold-accent:  #b7861e;
-  --shadow-card:  0 2px 12px rgba(15, 31, 61, 0.08);
-  --shadow-hover: 0 8px 32px rgba(15, 31, 61, 0.14);
-  --shadow-panel: 0 20px 60px rgba(15, 31, 61, 0.18);
+  --panel-soft:   rgba(0, 0, 0, 0.035);
+  --panel-hover:  rgba(0, 0, 0, 0.055);
+  --border:       #e5e5e5;
+  --border-mid:   #d4d4d4;
+  --border-strong:#b8c9ed;
+  --text:         #171717;
+  --text-soft:    #3f3f46;
+  --muted:        #6b6b6b;
+  --dim:          #a3a3a3;
+  --accent:       #315fc5;
+  --accent-light: #315fc5;
+  --accent-deep:  #244aa1;
+  --accent-glow:  rgba(49, 95, 197, 0.12);
+  --green:        #16825d;
+  --green-soft:   #eaf7f1;
+  --red:          #c94a4a;
+  --red-soft:     #fdf0f0;
+  --amber:        #a86619;
+  --amber-soft:   #fff7e8;
+  --gold-accent:  #9c6b1c;
+  --shadow-card:  0 2px 12px rgba(0, 0, 0, 0.05);
+  --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.09);
+  --shadow-panel: 0 20px 60px rgba(0, 0, 0, 0.12);
 
   background:
-    radial-gradient(ellipse at 85% 0%, rgba(37, 99, 235, 0.09) 0%, transparent 45%),
-    radial-gradient(ellipse at 15% 100%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+    radial-gradient(ellipse at 85% 0%, rgba(49, 95, 197, 0.035) 0%, transparent 45%),
+    radial-gradient(ellipse at 15% 100%, rgba(0, 0, 0, 0.015) 0%, transparent 40%),
     var(--bg);
 }
 
@@ -514,7 +514,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .hero-glow-two {
-  background: #8b5cf6;
+  background: var(--accent);
   height: 320px;
   right: 18%;
   top: 60px;
@@ -566,7 +566,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .app-shell .hero h1 span {
-  background: linear-gradient(90deg, var(--accent-light), #a78bfa);
+  background: linear-gradient(90deg, var(--accent-light), var(--accent-deep));
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -596,7 +596,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .app-shell .semantic-card::before {
-  background: linear-gradient(90deg, var(--accent), #8b5cf6, transparent 75%);
+  background: linear-gradient(90deg, var(--accent), var(--accent-deep), transparent 75%);
   content: "";
   height: 2px;
   left: 20px;
@@ -1372,7 +1372,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .progress span {
-  background: linear-gradient(90deg, var(--accent), #8b5cf6);
+  background: linear-gradient(90deg, var(--accent), var(--accent-deep));
   border-radius: 10px;
   display: block;
   height: 100%;
