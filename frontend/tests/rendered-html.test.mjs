@@ -95,6 +95,18 @@ test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검
   assert.doesNotMatch(page, /className="save-search"/);
 });
 
+test("검색 상세조건의 사업금액 초기값은 금액 전체이다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(
+    page,
+    /const DEFAULT_SEARCH: SearchSnapshot = \{[\s\S]*?maxBudget:\s*0,/,
+  );
+  assert.match(page, /\{ label: "금액 전체", value: 0 \}/);
+  assert.match(page, /const \[maxBudget, setMaxBudget\] = useState\(DEFAULT_SEARCH\.maxBudget\)/);
+  assert.match(page, /void runSearch\(DEFAULT_SEARCH\)/);
+});
+
 test("서버가 적용한 AI 우선 조건을 프런트엔드에서 다시 상세조건으로 제한하지 않는다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const filteredBody = page.match(
@@ -627,4 +639,41 @@ test("관리자가 추천 피드백 수집과 표시를 끌 수 있다", async (
   assert.match(admin, /updateFeedbackEnabled/);
   assert.match(adminRoute, /isAdminAuthenticated/);
   assert.match(publicRoute, /feedback\/settings/);
+});
+
+test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 제공한다", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const insights = await readFile(
+    new URL("../app/insights/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /<a href="\/insights">/);
+  assert.doesNotMatch(page, /id="insight"/);
+  assert.doesNotMatch(page, /const insightData = useMemo/);
+  assert.match(insights, /const insightData = useMemo/);
+  assert.match(insights, />참여 기회 요약</);
+  assert.match(insights, />기업 역량과 시장 수요 비교</);
+  assert.match(insights, />입찰시장 동향</);
+  assert.match(insights, />놓치고 있는 공고 분석</);
+  assert.match(insights, /className="active" href="\/insights" aria-current="page"/);
+  assert.match(insights, /const INSIGHT_PAGE_SIZE = 200/);
+  assert.match(insights, /const INSIGHT_TARGET_SIZE = 1_000/);
+  assert.match(insights, /page <= maximumPages/);
+  assert.match(insights, /uniqueBids\.set\(bid\.id, bid\)/);
+  assert.match(insights, /건 분석 중/);
+  assert.match(css, /\.app-shell \.insight-dashboard/);
+  assert.match(css, /\.app-shell \.insights-main/);
+  assert.match(css, /\.app-shell \.insight-grid/);
+  assert.match(css, /\.app-shell \.demand-list/);
+  assert.match(css, /\.app-shell \.market-bars/);
+  assert.match(css, /\.app-shell \.missed-list/);
+  assert.match(css, /\.app-shell\.insights-page \.insight-panel-head h3\s*\{[\s\S]*?font-size:\s*17px/);
+  assert.match(css, /\.app-shell\.insights-page \.demand-list li > span\s*\{[\s\S]*?font-size:\s*13px/);
+  assert.match(
+    css,
+    /\.app-shell\.insights-page \.market-bars > div\s*\{[\s\S]*?grid-template-columns:\s*56px minmax\(100px, 400px\) 72px/,
+  );
+  assert.match(css, /\.app-shell\.insights-page \.market-bars > div > strong\s*\{[\s\S]*?text-align:\s*right/);
 });

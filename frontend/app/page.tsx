@@ -58,7 +58,7 @@ type SearchSnapshot = {
 const DEFAULT_SEARCH: SearchSnapshot = {
   category: "전체",
   region: "전체 지역",
-  maxBudget: 500_000_000,
+  maxBudget: 0,
   includeKeyword: "",
   excludeKeyword: "",
   semanticQuery: "",
@@ -1494,7 +1494,7 @@ export default function Home() {
             </svg>
             입찰 탐색
           </a>
-          <a href="#insight">
+          <a href="/insights">
             <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M5 19V11M12 19V5M19 19v-8" />
               <path d="m4 8 5-4 4 4 6-5" />
@@ -1719,7 +1719,7 @@ export default function Home() {
                     }
                     onClick={() => setSearchTraceOpen((open) => !open)}
                   >
-                    <span>검색 과정</span>
+                    <span>검색 과정 보기</span>
                     <small>{searchElapsedMs.toLocaleString("ko-KR")}ms</small>
                     <span aria-hidden="true">{searchTraceOpen ? "−" : "+"}</span>
                   </button>
