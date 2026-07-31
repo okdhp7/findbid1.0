@@ -1683,7 +1683,7 @@ export default function Home() {
                 }}
                 enterKeyHint="search"
                 aria-label="찾고 싶은 입찰사업을 자연어로 입력"
-                placeholder="예: 수도권 공공기관의 AI 기반 웹서비스 구축 사업. Java, React, Python 기술을 활용하고 5억원 이하인 사업을 찾습니다."
+                placeholder="서울 경기에  인공지능 시스템 구축 용역 사업으로 10억원 이하인 수의계약 또는 제한경쟁 사업을 찾아줘"
               />
               <button
                 type="button"
@@ -2063,7 +2063,7 @@ export default function Home() {
                   {searchTotal.toLocaleString("ko-KR")}<em>건</em>
                 </span>
               </h2>
-              <p>기업 프로필과 검색 조건을 반영한 입찰공고입니다.</p>
+              <p>G2B API에 의하여 수집된 입찰공고를 기준으로 검색하며, 모든 나라장터 입찰공고를 포함하는것을 보장하지는 않습니다.</p>
             </div>
             <div className="toolbar-actions">
               <select

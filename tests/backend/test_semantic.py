@@ -296,6 +296,61 @@ def test_exact_semantic_anchor_filters_and_prioritizes_related_bids() -> None:
     assert [row["bid_number"] for row in ranked] == ["trip"]
 
 
+def test_preferred_region_ranks_local_before_nationwide_and_other_regions() -> None:
+    rows = [
+        {
+            "bid_number": "nationwide",
+            "title": "학생복 구매",
+            "description": "신입생 학생복 구매",
+            "region_name": None,
+            "noticer_name": "교육부",
+        },
+        {
+            "bid_number": "other",
+            "title": "학생복 구매",
+            "description": "신입생 학생복 구매",
+            "region_name": "서울특별시",
+            "noticer_name": "서울특별시교육청",
+        },
+        {
+            "bid_number": "local",
+            "title": "학생복 구매",
+            "description": "신입생 학생복 구매",
+            "region_name": None,
+            "noticer_name": "경기도교육청",
+        },
+    ]
+    intent = parse_semantic_intent("경기 학생복 구매")
+
+    ranked = ExternalBidRepository._prioritize_semantic_rows(
+        rows,
+        intent,
+        {
+            "nationwide": 80,
+            "other": 80,
+            "local": 80,
+        },
+    )
+
+    assert [row["bid_number"] for row in ranked] == [
+        "local",
+        "nationwide",
+        "other",
+    ]
+    assert ExternalBidRepository._preferred_region_priority(
+        rows[2],
+        ("경기",),
+    ) == 2
+    assert ExternalBidRepository._preferred_region_priority(
+        rows[0],
+        ("경기",),
+    ) == 1
+    assert ExternalBidRepository._preferred_region_priority(
+        rows[1],
+        ("경기",),
+    ) == 0
+
+
 def test_all_bid_knowledge_domains_are_loaded() -> None:
     assert len(DOMAIN_CONCEPTS) >= 48
     assert {
@@ -437,6 +492,34 @@ def test_demand_agency_and_contract_method_are_hard_filters() -> None:
         "수요기관: 한국소비자원",
         "계약방법: 제한경쟁",
     ]
+
+
+def test_contract_method_or_connector_is_not_a_required_keyword() -> None:
+    query = "수의계약 또는 제한경쟁"
+    analysis = analyze_query(query)
+
+    assert set(analysis.contract_methods) == {"수의계약", "제한경쟁"}
+    assert analysis.free_text_terms == ()
+    assert analysis.anchor_terms == ()
+    assert "필수 핵심어: 또는" not in describe_conditions(analysis)
+    assert describe_conditions(analysis) == [
+        "계약방법: 제한경쟁 · 수의계약",
+    ]
+
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(semantic_query=query)
+    )
+
+    assert params["contract_method_0"] == "%제한경쟁%"
+    assert params["contract_method_1"] == "%수의계약%"
+    contract_condition = next(
+        condition
+        for condition in conditions
+        if "contract_method_0" in condition
+    )
+    assert " OR " in contract_condition
+    assert not any("semantic_must_" in condition for condition in conditions)
 
 
 def test_search_conditions_are_not_shown_when_not_requested() -> None:

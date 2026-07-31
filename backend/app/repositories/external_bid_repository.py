@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.eligibility.rules import COMPANY_PROFILE
 from app.knowledge import analyze_query
+from app.knowledge.regions import region_aliases
 from app.repositories.semantic_embedding_repository import (
     SemanticEmbeddingRepository,
 )
@@ -381,6 +382,32 @@ class ExternalBidRepository:
             and get_semantic_search_engine().enabled
         )
 
+    @staticmethod
+    def _preferred_region_priority(
+        row: dict[str, Any],
+        preferred_regions: tuple[str, ...],
+    ) -> int:
+        if not preferred_regions:
+            return 0
+
+        bid_region = str(row.get("region_name") or "").strip().lower()
+        locality_text = " ".join(
+            str(row.get(key) or "").strip().lower()
+            for key in (
+                "region_name",
+                "noticer_name",
+                "agency_name",
+            )
+        )
+        if any(
+            any(alias in locality_text for alias in region_aliases(region))
+            for region in preferred_regions
+        ):
+            return 2
+        if not bid_region or "전국" in bid_region:
+            return 1
+        return 0
+
     @classmethod
     def _prioritize_semantic_rows(
         cls,
@@ -389,7 +416,12 @@ class ExternalBidRepository:
         semantic_scores: dict[str, int],
     ) -> list[dict[str, Any]]:
         ranked: list[
-            tuple[tuple[int, int, int, int, int, int], int, dict[str, Any]]
+            tuple[
+                tuple[int, int, int, int, int, int],
+                int,
+                int,
+                dict[str, Any],
+            ]
         ] = []
         for row in rows:
             bid_id = str(row["bid_number"])
@@ -402,6 +434,10 @@ class ExternalBidRepository:
             ranked.append(
                 (
                     lexical_rank,
+                    cls._preferred_region_priority(
+                        row,
+                        intent.analysis.preferred_regions,
+                    ),
                     semantic_scores.get(bid_id, 0),
                     row,
                 )
@@ -433,7 +469,7 @@ class ExternalBidRepository:
                 item
                 for item in ranked
                 if not any(
-                    condition_matches(cls._document_text(item[2]), condition)
+                    condition_matches(cls._document_text(item[3]), condition)
                     for condition in must_not_conditions
                 )
             ]
@@ -442,7 +478,7 @@ class ExternalBidRepository:
                 item
                 for item in ranked
                 if all(
-                    condition_matches(cls._document_text(item[2]), condition)
+                    condition_matches(cls._document_text(item[3]), condition)
                     for condition in must_conditions
                 )
             ]
@@ -451,7 +487,7 @@ class ExternalBidRepository:
                 item
                 for item in ranked
                 if any(
-                    condition_matches(cls._document_text(item[2]), condition)
+                    condition_matches(cls._document_text(item[3]), condition)
                     for condition in should_conditions
                 )
             ]
@@ -462,7 +498,7 @@ class ExternalBidRepository:
                 item
                 for item in ranked
                 if matches_semantic_constraints(
-                    cls._document_text(item[2]),
+                    cls._document_text(item[3]),
                     intent,
                 )
             ]
@@ -473,13 +509,14 @@ class ExternalBidRepository:
                 item[0][1],
                 item[0][2],
                 item[0][3],
+                item[1],
                 item[0][4],
                 item[0][5],
-                item[1],
+                item[2],
             ),
             reverse=True,
         )
-        return [item[2] for item in ranked]
+        return [item[3] for item in ranked]
 
     @classmethod
     def _semantic_candidates(
@@ -950,6 +987,18 @@ class ExternalBidRepository:
             )
             for row in rows
         ]
+        preferred_regions = intent.analysis.preferred_regions or (
+            (request.region,)
+            if request.region and request.region != "전체 지역"
+            else ()
+        )
+        region_priority_by_id = {
+            str(row["bid_number"]): self._preferred_region_priority(
+                row,
+                preferred_regions,
+            )
+            for row in rows
+        }
         if request.only_eligible:
             records = [
                 record for record in records if record.eligibility == "참가 가능"
@@ -966,7 +1015,14 @@ class ExternalBidRepository:
                     -item.score,
                 ),
             )
-        return sorted(records, key=lambda item: item.score, reverse=True)
+        return sorted(
+            records,
+            key=lambda item: (
+                region_priority_by_id.get(item.id, 0),
+                item.score,
+            ),
+            reverse=True,
+        )
 
     def search_with_metrics(
         self,
