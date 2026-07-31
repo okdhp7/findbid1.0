@@ -10,6 +10,11 @@ from app.knowledge.engine import (
     region_document_score,
 )
 from app.knowledge.regions import region_aliases
+from app.search_conditions import (
+    SearchCondition,
+    build_search_conditions,
+    condition_matches,
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,7 @@ class SemanticIntent:
     terms: tuple[str, ...]
     anchor_terms: tuple[str, ...]
     constraint_terms: tuple[str, ...]
+    conditions: tuple[SearchCondition, ...]
     analysis: KnowledgeAnalysis
 
 
@@ -40,6 +46,7 @@ def parse_semantic_intent(text: str) -> SemanticIntent:
         ),
         anchor_terms=analysis.anchor_terms,
         constraint_terms=analysis.constraint_terms,
+        conditions=build_search_conditions(analysis),
         analysis=analysis,
     )
 
@@ -71,7 +78,6 @@ def semantic_lexical_rank(
     normalized_document = document.lower()
     title_matches = 0
     document_matches = 0
-    anchor_matches = 0
     exact_phrase = int(
         bool(intent.normalized_query)
         and intent.normalized_query in normalized_title
@@ -84,12 +90,26 @@ def semantic_lexical_rank(
         elif any(variant in normalized_document for variant in variants):
             document_matches += 1
 
-    for term in intent.anchor_terms:
-        if any(
-            variant in normalized_document
-            for variant in term_variants(term)
-        ):
-            anchor_matches += 1
+    semantic_conditions = [
+        condition
+        for condition in intent.conditions
+        if condition.kind == "semantic"
+    ]
+    must_matches = sum(
+        condition_matches(document, condition)
+        for condition in semantic_conditions
+        if condition.mode == "must"
+    )
+    should_matches = sum(
+        condition_matches(document, condition)
+        for condition in semantic_conditions
+        if condition.mode == "should"
+    )
+    boost_matches = sum(
+        condition_matches(document, condition)
+        for condition in semantic_conditions
+        if condition.mode == "boost"
+    )
 
     region_score = region_document_score(document, intent.analysis)
     knowledge_score = knowledge_document_score(
@@ -98,9 +118,9 @@ def semantic_lexical_rank(
     )
     return (
         exact_phrase,
-        anchor_matches,
+        must_matches,
+        should_matches,
+        boost_matches,
         knowledge_score,
-        region_score,
-        title_matches,
-        document_matches,
+        region_score + title_matches * 2 + document_matches,
     )

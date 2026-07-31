@@ -47,6 +47,9 @@ REQUEST_PHRASES = (
 )
 IGNORED_TERMS = {
     "공고",
+    "관내",
+    "관외",
+    "관할",
     "관련",
     "서비스",
     "입찰",
@@ -96,9 +99,45 @@ PARTICLE_SUFFIXES = (
     "를",
     "의",
     "에",
-    "도",
     "만",
     "인",
+)
+CATEGORY_SUFFIXES = ("용역", "물품", "공사")
+PURCHASE_TERMS = ("구매", "구입")
+INTRODUCTION_TERM = "도입"
+TANGIBLE_PRODUCT_HINTS = (
+    "장비",
+    "기기",
+    "기자재",
+    "자재",
+    "제품",
+    "물품",
+    "가구",
+    "차량",
+    "자동차",
+    "컴퓨터",
+    "노트북",
+    "서버",
+    "단말",
+    "부품",
+    "소모품",
+    "용품",
+    "비품",
+    "기계",
+    "설비",
+)
+DIGITAL_SERVICE_HINTS = (
+    "시스템",
+    "플랫폼",
+    "솔루션",
+    "서비스",
+    "소프트웨어",
+    "프로그램",
+    "정보화",
+    "클라우드",
+    "홈페이지",
+    "웹사이트",
+    "애플리케이션",
 )
 
 
@@ -139,6 +178,26 @@ def _strip_particle(token: str) -> str:
         if token.endswith(suffix) and len(token) - len(suffix) >= 2:
             return token[: -len(suffix)]
     return token
+
+
+def _split_category_suffix(token: str) -> tuple[str, ...]:
+    for suffix in CATEGORY_SUFFIXES:
+        if token.endswith(suffix) and len(token) - len(suffix) >= 2:
+            return token[: -len(suffix)], suffix
+    return (token,)
+
+
+def _infer_purchase_category(text: str) -> str | None:
+    normalized = text.lower()
+    if any(term in normalized for term in PURCHASE_TERMS):
+        return "물품"
+    if INTRODUCTION_TERM not in normalized:
+        return None
+    if any(hint in normalized for hint in DIGITAL_SERVICE_HINTS):
+        return None
+    if any(hint in normalized for hint in TANGIBLE_PRODUCT_HINTS):
+        return "물품"
+    return None
 
 
 def _amount_value(number: str, unit: str) -> int:
@@ -208,10 +267,11 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
     terms: list[str] = []
     for raw_token in TOKEN_PATTERN.findall(cleaned):
         token = _strip_particle(raw_token.lower()).strip(".")
-        if len(token) < 2 or token in IGNORED_TERMS:
-            continue
-        if token not in terms:
-            terms.append(token)
+        for split_token in _split_category_suffix(token):
+            if len(split_token) < 2 or split_token in IGNORED_TERMS:
+                continue
+            if split_token not in terms:
+                terms.append(split_token)
 
     entities: list[KnowledgeEntity] = []
     occupied: set[tuple[str, str]] = set()
@@ -290,6 +350,8 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         ),
         None,
     )
+    if category is None:
+        category = _infer_purchase_category(original)
     contract_methods = [
         entity.canonical
         for entity in entities
@@ -382,7 +444,7 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         suffix = "참가 지역" if participant_context else "우선 지역"
         conditions.append(f"{suffix}: {region_label}")
     if category:
-        conditions.append(category)
+        conditions.append(f"업무구분: {category}")
     if demand_agencies:
         conditions.append(
             "수요기관: " + " · ".join(demand_agencies)
@@ -394,10 +456,10 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
         )
     if min_budget:
         operator = "이상" if min_budget_inclusive else "초과"
-        conditions.append(f"{_budget_label(min_budget)} {operator}")
+        conditions.append(f"사업금액: {_budget_label(min_budget)} {operator}")
     if max_budget:
         operator = "이하" if max_budget_inclusive else "미만"
-        conditions.append(f"{_budget_label(max_budget)} {operator}")
+        conditions.append(f"사업금액: {_budget_label(max_budget)} {operator}")
     if closing_days:
         conditions.append(f"{closing_days}일 이내 마감")
     core_entities = [

@@ -197,6 +197,59 @@ def test_multiple_negative_reasons_all_adjust_similar_bids() -> None:
     assert by_id["similar"].feedback_adjustment == -4
 
 
+def test_topic_feedback_uses_condition_roles_for_adjustment() -> None:
+    source = _record("source", score=80, tags=["시설물", "환경개선"])
+    related = _record("related", score=79, tags=["시설물", "환경개선"])
+    unrelated = _record("unrelated", score=78, tags=["정보시스템", "고도화"])
+    feedback = {
+        "source": {
+            "type": "negative",
+            "reasons": ["검색 주제와 다름"],
+            "features": {
+                "category": "용역",
+                "tags": ["시설물", "환경개선"],
+            },
+            "conditions": [
+                {
+                    "id": "target",
+                    "role": "target",
+                    "mode": "must",
+                    "kind": "semantic",
+                    "value": "시설물",
+                    "variants": ["시설물"],
+                },
+                {
+                    "id": "action",
+                    "role": "action",
+                    "mode": "should",
+                    "kind": "semantic",
+                    "value": "환경개선",
+                    "variants": ["환경개선"],
+                },
+                {
+                    "id": "intent",
+                    "role": "intent",
+                    "mode": "boost",
+                    "kind": "semantic",
+                    "value": "고도화",
+                    "variants": ["고도화", "개선"],
+                },
+            ],
+        },
+    }
+
+    ranked, _ = apply_feedback_adjustments(
+        [source, related, unrelated],
+        feedback,
+        10,
+    )
+
+    by_id = {record.id: record for record in ranked}
+    assert by_id["source"].feedback_adjustment == -6
+    assert by_id["related"].feedback_adjustment == -5
+    assert by_id["unrelated"].feedback_adjustment == -1
+
+
 class _SettingsRedis:
     def __init__(self) -> None:
         self.values: dict[tuple[str, str], str] = {}

@@ -3,6 +3,7 @@ from app.knowledge import analyze_query, expand_region
 from app.knowledge.catalog import DOMAIN_CONCEPTS
 from app.repositories.external_bid_repository import ExternalBidRepository
 from app.search_intent import parse_semantic_intent
+from app.search_conditions import build_search_conditions, describe_conditions
 from app.semantic.engine import SemanticSearchEngine
 from findbid_shared.schemas import SearchRequest
 
@@ -35,10 +36,23 @@ def test_natural_language_intent_is_described() -> None:
     )
 
     assert "우선 지역: 경기" in conditions
-    assert "용역" in conditions
-    assert "5억원 이하" in conditions
-    assert "검색 의도: 인공지능" in conditions
+    assert "업무구분: 용역" in conditions
+    assert "사업금액: 5억원 이하" in conditions
+    assert "필수 핵심어: 인공지능" in conditions
     assert "제외: 장비 납품" in conditions
+
+
+def test_conditions_with_the_same_role_are_grouped_for_display() -> None:
+    conditions = describe_search_intent(
+        "수도권 일반경쟁 torch pandas numpy Python 인공지능 구축"
+    )
+
+    assert conditions == [
+        "우선 지역: 수도권",
+        "계약방법: 일반경쟁",
+        "필수 핵심어: torch · pandas · numpy · Python · 인공지능",
+        "우선 조건: 구축",
+    ]
 
 
 def test_semantic_query_removes_request_words_and_extracts_anchor() -> None:
@@ -50,6 +64,201 @@ def test_semantic_query_removes_request_words_and_extracts_anchor() -> None:
     assert intent.terms == ("서울", "중학교", "수학여행")
     assert intent.anchor_terms == ("수학여행",)
     assert intent.constraint_terms == ("중학교",)
+
+
+def test_local_scope_and_compound_category_are_not_required_keywords() -> None:
+    analysis = analyze_query("관내 상수도공사")
+
+    assert analysis.category == "공사"
+    assert analysis.terms == ("상수도", "공사")
+    assert analysis.free_text_terms == ("상수도",)
+    assert "관내" not in analysis.normalized_query
+    assert describe_conditions(analysis) == [
+        "업무구분: 공사",
+        "필수 핵심어: 상수도",
+    ]
+
+
+def test_korean_domain_noun_ending_in_do_is_preserved() -> None:
+    analysis = analyze_query("상수도")
+
+    assert analysis.terms == ("상수도",)
+    assert analysis.free_text_terms == ("상수도",)
+    assert describe_conditions(analysis) == ["필수 핵심어: 상수도"]
+
+
+def test_compound_category_suffixes_are_split_generally() -> None:
+    cases = (
+        ("기술자문용역", "용역", "기술자문"),
+        ("홍보물품", "물품", "홍보"),
+        ("배관공사", "공사", "배관"),
+    )
+
+    for query, category, target in cases:
+        analysis = analyze_query(query)
+        assert analysis.category == category
+        assert analysis.free_text_terms == (target,)
+
+
+def test_purchase_words_infer_goods_when_category_is_not_explicit() -> None:
+    cases = (
+        ("노트북 구매", "노트북"),
+        ("사무용 가구 구입", "사무용 가구"),
+        ("보안장비 도입", "보안장비"),
+    )
+
+    for query, target in cases:
+        analysis = analyze_query(query)
+        assert analysis.category == "물품"
+        assert target in " ".join(analysis.free_text_terms)
+        assert describe_conditions(analysis)[0] == "업무구분: 물품"
+
+
+def test_digital_introduction_does_not_force_goods_category() -> None:
+    assert analyze_query("AI 시스템 도입").category is None
+    assert analyze_query("클라우드 플랫폼 도입").category is None
+
+
+def test_explicit_category_overrides_purchase_inference() -> None:
+    assert analyze_query("시스템 도입 용역").category == "용역"
+    assert analyze_query("자재 구매 공사").category == "공사"
+    assert analyze_query("장비 구입 물품").category == "물품"
+
+
+def test_required_semantic_terms_are_applied_before_vector_ranking() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(semantic_query="토목구조물 보수공사")
+    )
+
+    assert any(
+        "semantic_must_0_0" in condition
+        for condition in conditions
+    )
+    assert params["semantic_must_0_0"] == "%토목구조물%"
+
+
+def test_exact_required_match_survives_semantic_score_threshold() -> None:
+    intent = parse_semantic_intent("토목구조물 보수공사")
+    rows = [
+        {
+            "bid_number": "exact",
+            "title": "2026년 인천1호선 토목구조물 보수공사",
+            "description": "",
+        },
+        {
+            "bid_number": "semantic-only",
+            "title": "도시철도 역사 환경개선 공사",
+            "description": "",
+        },
+    ]
+
+    candidates, preserved_count = ExternalBidRepository._semantic_candidates(
+        rows,
+        intent,
+        {"semantic-only": 92},
+    )
+    ranked = ExternalBidRepository._prioritize_semantic_rows(
+        candidates,
+        intent,
+        {"semantic-only": 92},
+    )
+
+    assert preserved_count == 1
+    assert {row["bid_number"] for row in candidates} == {
+        "exact",
+        "semantic-only",
+    }
+    assert [row["bid_number"] for row in ranked] == ["exact"]
+
+
+def test_compound_phrase_separates_required_target_and_derived_intent() -> None:
+    analysis = analyze_query("시설물 환경개선 사업")
+    conditions = build_search_conditions(analysis)
+    by_value = {condition.value: condition for condition in conditions}
+
+    assert by_value["시설물"].mode == "must"
+    assert by_value["시설물"].role == "target"
+    assert by_value["환경개선"].mode == "should"
+    assert by_value["환경개선"].role == "action"
+    assert by_value["고도화"].mode == "boost"
+    assert by_value["고도화"].source == "derived"
+    assert describe_conditions(analysis) == [
+        "필수 핵심어: 시설물",
+        "우선 조건: 환경개선",
+        "보조 의도: 고도화",
+    ]
+
+
+def test_derived_intent_cannot_admit_unrelated_bid_without_required_target() -> None:
+    rows = [
+        {
+            "bid_number": "facility",
+            "title": "공원 시설물 환경개선 사업",
+            "description": "노후 시설 정비",
+        },
+        {
+            "bid_number": "system",
+            "title": "행정정보시스템 고도화 사업",
+            "description": "기능 개선 및 운영",
+        },
+    ]
+
+    ranked = ExternalBidRepository._prioritize_semantic_rows(
+        rows,
+        parse_semantic_intent("시설물 환경개선 사업"),
+        {"facility": 70, "system": 95},
+    )
+
+    assert [row["bid_number"] for row in ranked] == ["facility"]
+
+
+def test_explicit_target_and_action_are_combined_instead_of_or_searched() -> None:
+    query = "홈페이지 구축 사업 1억원 이상"
+    analysis = analyze_query(query)
+    conditions = build_search_conditions(
+        analysis,
+        SearchRequest(semantic_query=query),
+    )
+    by_value = {condition.value: condition for condition in conditions}
+
+    assert by_value["홈페이지"].mode == "must"
+    assert by_value["홈페이지"].role == "target"
+    assert {"홈페이지", "웹사이트", "누리집", "웹 포털"}.issubset(
+        set(by_value["홈페이지"].variants)
+    )
+    assert by_value["구축"].mode == "should"
+    assert by_value["구축"].role == "action"
+    assert describe_conditions(analysis) == [
+        "사업금액: 1억원 이상",
+        "필수 핵심어: 홈페이지",
+        "우선 조건: 구축",
+    ]
+
+    rows = [
+        {
+            "bid_number": "homepage",
+            "title": "대표 홈페이지 신규 구축 사업",
+            "description": "웹사이트 개발 및 도입",
+        },
+        {
+            "bid_number": "platform",
+            "title": "AI 학습 플랫폼 구축 사업",
+            "description": "인공지능 서비스 개발",
+        },
+        {
+            "bid_number": "redesign",
+            "title": "기관 홈페이지 디자인 개선",
+            "description": "화면 재설계",
+        },
+    ]
+    ranked = ExternalBidRepository._prioritize_semantic_rows(
+        rows,
+        parse_semantic_intent(query),
+        {"homepage": 70, "platform": 95, "redesign": 80},
+    )
+
+    assert [row["bid_number"] for row in ranked] == ["homepage"]
 
 
 def test_exact_semantic_anchor_filters_and_prioritizes_related_bids() -> None:
@@ -135,17 +344,17 @@ def test_budget_comparison_operators_are_preserved() -> None:
 
     assert minimum.min_budget == 100_000_000
     assert minimum.max_budget is None
-    assert "1억원 이상" in minimum.conditions
+    assert "사업금액: 1억원 이상" in minimum.conditions
     assert over.min_budget == 100_000_000
     assert over.min_budget_inclusive is False
-    assert "1억원 초과" in over.conditions
+    assert "사업금액: 1억원 초과" in over.conditions
     assert under.max_budget == 100_000_000
     assert under.max_budget_inclusive is False
-    assert "1억원 미만" in under.conditions
+    assert "사업금액: 1억원 미만" in under.conditions
     assert range_query.min_budget == 100_000_000
     assert range_query.max_budget == 500_000_000
-    assert "1억원 이상" in range_query.conditions
-    assert "5억원 이하" in range_query.conditions
+    assert "사업금액: 1억원 이상" in range_query.conditions
+    assert "사업금액: 5억원 이하" in range_query.conditions
 
 
 def test_natural_language_minimum_budget_is_used_in_sql() -> None:

@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.agent.orchestrator import describe_search_intent
 from app.feedback import (
     apply_feedback_adjustments,
     feedback_store,
@@ -17,6 +16,7 @@ from app.search_cache import (
     get_cached_semantic_search,
     set_cached_semantic_search,
 )
+from app.search_conditions import build_search_conditions, describe_conditions
 from app.semantic import get_semantic_search_engine
 from findbid_shared.config import get_settings
 from findbid_shared.recommendation_versions import recommendation_versions
@@ -44,6 +44,7 @@ class SearchService:
         fingerprint = search_fingerprint(request)
         feedback_enabled = feedback_store().is_enabled()
         analysis = analyze_query(request.semantic_query)
+        search_conditions = build_search_conditions(analysis, request)
         trace: list[str] = [
             f"검색 시작: {request.semantic_query or '상세조건 검색'}",
             f"문장 정규화: {analysis.normalized_query or '없음'}",
@@ -92,6 +93,14 @@ class SearchService:
             trace.append(
                 "계약방법 필터: "
                 + "·".join(analysis.contract_methods)
+            )
+        if search_conditions:
+            trace.append(
+                "검색조건 역할: "
+                + ", ".join(
+                    f"{condition.mode}={condition.value}"
+                    for condition in search_conditions
+                )
             )
 
         cache_hit = False
@@ -204,6 +213,10 @@ class SearchService:
                 search_id,
                 fingerprint,
                 items,
+                search_conditions=[
+                    condition.to_dict()
+                    for condition in search_conditions
+                ],
             )
 
         trace.append(f"최종 결과: {total:,}건")
@@ -273,9 +286,15 @@ class SearchService:
                     "exclude": request.exclude_keywords,
                 },
                 semantic_query=request.semantic_query,
-                interpreted_conditions=describe_search_intent(
-                    request.semantic_query
+                interpreted_conditions=(
+                    describe_conditions(analysis, request)
+                    if request.semantic_query.strip()
+                    else []
                 ),
+                semantic_conditions=[
+                    condition.to_dict()
+                    for condition in search_conditions
+                ],
                 semantic_engine=(
                     get_semantic_search_engine().engine_name
                     if request.semantic_query.strip()

@@ -84,7 +84,14 @@ test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검
   assert.match(page, /onClick=\{\(\) => \{ runSearchNow\(currentSearchSnapshot\(\)\); setFiltersOpen\(false\); \}\}/);
   assert.match(page, /조건 적용하기/);
   assert.match(page, /\/\*[\s\S]*?조건 적용하기[\s\S]*?\*\//);
-  assert.match(page, /className="apply-button"[\s\S]*?onClick=\{openSaveSearch\}[\s\S]*?검색조건 저장/);
+  assert.match(
+    page,
+    /className="reset-button"[\s\S]*?<span aria-hidden="true">×<\/span>[\s\S]*?조건 초기화[\s\S]*?className="apply-button"[\s\S]*?검색조건 저장\/선택/,
+  );
+  assert.match(
+    page,
+    /className="semantic-input-clear"[\s\S]*?<span aria-hidden="true">×<\/span>[\s\S]*?입력 지우기/,
+  );
   assert.doesNotMatch(page, /className="save-search"/);
 });
 
@@ -298,6 +305,8 @@ test("익명 세션 추천 피드백과 비밀번호 관리페이지를 제공�
   assert.match(page, /추천 부적합/);
   assert.match(page, /부적합 사유를 모두 선택한 후 적용해 주세요/);
   assert.match(page, /selectedFeedbackReasons/);
+  assert.match(page, /semanticConditions/);
+  assert.match(page, /conditionIds/);
   assert.match(page, /선택한 사유 적용/);
   assert.match(page, /reasons,/);
   assert.match(page, /이 공고를 추천에서 제외할까요/);
@@ -365,6 +374,8 @@ test("검색 과정과 처리시간을 펼쳐서 확인할 수 있다", async ()
   assert.match(page, /searchTrace\?: string\[\]/);
   assert.match(page, /setSearchTrace\(data\.queryPlan\?\.searchTrace \?\? \[\]\)/);
   assert.match(page, />검색 과정 보기<\/span>/);
+  assert.doesNotMatch(page, /의미 벡터 (?:적용|사용)/);
+  assert.doesNotMatch(page, /semanticEngine|setSemanticEngine/);
   assert.match(page, /className="search-trace-panel"/);
   assert.match(
     page,
@@ -421,6 +432,10 @@ test("공고 카드에 전체 검색결과 기준 연번을 표시한다", async
   assert.match(page, /\(currentPage - 1\) \* PAGE_SIZE \+ index \+ 1/);
   assert.match(page, /className="bid-sequence"/);
   assert.match(page, /검색결과 \$\{\(currentPage - 1\) \* PAGE_SIZE \+ index \+ 1\}번/);
+  assert.match(
+    page,
+    /className="bid-meta-top"[\s\S]*?className="bid-sequence"[\s\S]*?className=\{`category category-\$\{bid\.category\}`\}/,
+  );
   assert.match(css, /\.app-shell \.bid-sequence/);
   assert.match(css, /font-variant-numeric:\s*tabular-nums/);
   const sequenceStyle = css.match(/\.app-shell \.bid-sequence\s*\{([^}]*)\}/)?.[1] ?? "";

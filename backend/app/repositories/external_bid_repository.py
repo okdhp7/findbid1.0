@@ -25,6 +25,7 @@ from app.search_intent import (
     parse_semantic_intent,
     semantic_lexical_rank,
 )
+from app.search_conditions import build_search_conditions, condition_matches
 from app.semantic import get_semantic_search_engine
 from findbid_shared.config import get_settings
 from findbid_shared.schemas import BidRecord, SearchRequest
@@ -406,9 +407,57 @@ class ExternalBidRepository:
                 )
             )
 
-        if intent.anchor_terms and any(item[0][1] > 0 for item in ranked):
-            ranked = [item for item in ranked if item[0][1] > 0]
-        if intent.constraint_terms:
+        semantic_conditions = [
+            condition
+            for condition in intent.conditions
+            if condition.kind == "semantic"
+        ]
+        must_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.mode == "must"
+        ]
+        should_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.mode == "should"
+        ]
+        must_not_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.mode == "must_not"
+        ]
+
+        if must_not_conditions:
+            ranked = [
+                item
+                for item in ranked
+                if not any(
+                    condition_matches(cls._document_text(item[2]), condition)
+                    for condition in must_not_conditions
+                )
+            ]
+        if must_conditions:
+            ranked = [
+                item
+                for item in ranked
+                if all(
+                    condition_matches(cls._document_text(item[2]), condition)
+                    for condition in must_conditions
+                )
+            ]
+        if should_conditions:
+            preferred_matches = [
+                item
+                for item in ranked
+                if any(
+                    condition_matches(cls._document_text(item[2]), condition)
+                    for condition in should_conditions
+                )
+            ]
+            if preferred_matches:
+                ranked = preferred_matches
+        elif intent.constraint_terms:
             ranked = [
                 item
                 for item in ranked
@@ -431,6 +480,64 @@ class ExternalBidRepository:
             reverse=True,
         )
         return [item[2] for item in ranked]
+
+    @classmethod
+    def _semantic_candidates(
+        cls,
+        rows: list[dict[str, Any]],
+        intent: SemanticIntent,
+        semantic_scores: dict[str, int],
+    ) -> tuple[list[dict[str, Any]], int]:
+        semantic_conditions = [
+            condition
+            for condition in intent.conditions
+            if condition.kind == "semantic"
+        ]
+        must_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.mode == "must"
+        ]
+        should_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.mode == "should"
+        ]
+        passed_ids = set(semantic_scores)
+        preserved_ids: set[str] = set()
+
+        for row in rows:
+            bid_id = str(row["bid_number"])
+            if bid_id in passed_ids:
+                continue
+            document = cls._document_text(row)
+            if must_conditions and all(
+                condition_matches(document, condition)
+                for condition in must_conditions
+            ):
+                preserved_ids.add(bid_id)
+            elif not must_conditions and should_conditions and any(
+                condition_matches(document, condition)
+                for condition in should_conditions
+            ):
+                preserved_ids.add(bid_id)
+            elif (
+                not must_conditions
+                and not should_conditions
+                and intent.constraint_terms
+                and matches_semantic_constraints(document, intent)
+            ):
+                preserved_ids.add(bid_id)
+
+        candidate_ids = passed_ids | preserved_ids
+        return (
+            [
+                row
+                for row in rows
+                if str(row["bid_number"]) in candidate_ids
+            ],
+            len(preserved_ids),
+        )
 
     def _to_record(
         self,
@@ -578,6 +685,18 @@ class ExternalBidRepository:
         return """
             lower(concat_ws(' ', b.title, b.description, b.category,
                 b.sub_category, b.detail_category, b.item_group_name))
+        """
+
+    @staticmethod
+    def _semantic_corpus() -> str:
+        return """
+            lower(concat_ws(' ', b.title, b.description, b.category,
+                b.sub_category, b.detail_category, b.item_group_name,
+                b.noticer_name, b.agency_name, b.contract_method,
+                b.winner_choice_method, b.region_restriction,
+                b.required_licenses,
+                CASE WHEN b.sme_only THEN '중소기업 소기업 소상공인 제한'
+                     ELSE '' END))
         """
 
     def get(self, bid_id: str) -> BidRecord | None:
@@ -740,11 +859,39 @@ class ExternalBidRepository:
             conditions.append(f"{corpus} NOT LIKE :{name}")
             params[name] = f"%{word.lower()}%"
 
+        semantic_corpus = self._semantic_corpus()
+        semantic_conditions = build_search_conditions(analysis, request)
+        must_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.kind == "semantic" and condition.mode == "must"
+        ]
+        must_not_conditions = [
+            condition
+            for condition in semantic_conditions
+            if condition.kind == "semantic" and condition.mode == "must_not"
+        ]
+        for condition_index, semantic_condition in enumerate(must_conditions):
+            variant_conditions: list[str] = []
+            for variant_index, variant in enumerate(semantic_condition.variants):
+                name = f"semantic_must_{condition_index}_{variant_index}"
+                variant_conditions.append(f"{semantic_corpus} LIKE :{name}")
+                params[name] = f"%{variant.lower()}%"
+            conditions.append(f"({' OR '.join(variant_conditions)})")
+        for condition_index, semantic_condition in enumerate(must_not_conditions):
+            variant_conditions = []
+            for variant_index, variant in enumerate(semantic_condition.variants):
+                name = f"semantic_must_not_{condition_index}_{variant_index}"
+                variant_conditions.append(f"{semantic_corpus} LIKE :{name}")
+                params[name] = f"%{variant.lower()}%"
+            conditions.append(f"NOT ({' OR '.join(variant_conditions)})")
+
         return conditions, params, order_by
 
     def _ranked_records(self, request: SearchRequest) -> list[BidRecord]:
         self.last_search_trace = []
         conditions, params, order_by = self._search_parts(request)
+        intent = parse_semantic_intent(request.semantic_query)
         semantic_enabled = self._semantic_ranking_enabled(request)
         limit_clause = ""
         if semantic_enabled:
@@ -777,15 +924,18 @@ class ExternalBidRepository:
             self.last_search_trace.append(
                 f"임베딩 유사도 통과: {len(semantic_scores):,}건"
             )
-            rows = [
-                row
-                for row in rows
-                if str(row["bid_number"]) in semantic_scores
-            ]
+            rows, preserved_count = self._semantic_candidates(
+                rows,
+                intent,
+                semantic_scores,
+            )
+            self.last_search_trace.append(
+                f"명시 조건으로 추가 보존: {preserved_count:,}건"
+            )
             semantic_count = len(rows)
             rows = self._prioritize_semantic_rows(
                 rows,
-                parse_semantic_intent(request.semantic_query),
+                intent,
                 semantic_scores,
             )
             self.last_search_trace.append(

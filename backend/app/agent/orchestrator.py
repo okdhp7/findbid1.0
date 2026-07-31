@@ -1,4 +1,5 @@
 from app.knowledge import analyze_query
+from app.search_conditions import describe_conditions
 from findbid_shared.schemas import SearchRequest
 
 
@@ -52,4 +53,5 @@ def build_search_request(text: str) -> SearchRequest:
 def describe_search_intent(text: str) -> list[str]:
     if not text.strip():
         return []
-    return list(analyze_query(text).conditions)
+    analysis = analyze_query(text)
+    return describe_conditions(analysis)

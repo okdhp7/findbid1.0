@@ -94,6 +94,17 @@ const feedbackReasons = [
   "기타",
 ];
 
+type SemanticCondition = {
+  id: string;
+  role: string;
+  mode: "must" | "should" | "boost" | "must_not" | "filter";
+  kind: string;
+  value: string;
+  variants: string[];
+  confidence: number;
+  source: string;
+};
+
 type CompanyProfileDraft = {
   name: string;
   location: string;
@@ -596,7 +607,7 @@ export default function Home() {
   const [closingSoonTotal, setClosingSoonTotal] = useState(0);
   const [averageScore, setAverageScore] = useState(0);
   const [interpretedConditions, setInterpretedConditions] = useState<string[]>([]);
-  const [semanticEngine, setSemanticEngine] = useState("");
+  const [semanticConditions, setSemanticConditions] = useState<SemanticCondition[]>([]);
   const [searchTrace, setSearchTrace] = useState<string[]>([]);
   const [searchTraceId, setSearchTraceId] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
@@ -845,7 +856,7 @@ export default function Home() {
         averageScore: number;
         queryPlan?: {
           interpretedConditions?: string[];
-          semanticEngine?: string;
+          semanticConditions?: SemanticCondition[];
           searchId?: string;
           searchTrace?: string[];
           elapsedMs?: number;
@@ -871,7 +882,11 @@ export default function Home() {
       setClosingSoonTotal(data.closingSoonTotal);
       setAverageScore(data.averageScore);
       setInterpretedConditions(data.queryPlan?.interpretedConditions ?? []);
-      setSemanticEngine(data.queryPlan?.semanticEngine ?? "");
+      setSemanticConditions(
+        Array.isArray(data.queryPlan?.semanticConditions)
+          ? data.queryPlan.semanticConditions
+          : [],
+      );
       setSearchTrace(data.queryPlan?.searchTrace ?? []);
       setSearchTraceId(data.queryPlan?.searchId ?? "");
       setSearchElapsedMs(data.queryPlan?.elapsedMs ?? 0);
@@ -888,7 +903,7 @@ export default function Home() {
       setClosingSoonTotal(0);
       setAverageScore(0);
       setInterpretedConditions([]);
-      setSemanticEngine("");
+      setSemanticConditions([]);
       setSearchTrace([]);
       setSearchTraceId("");
       setSearchElapsedMs(0);
@@ -918,6 +933,7 @@ export default function Home() {
     reasons: string[] = [],
     source: "favorite" | "detail" = "detail",
     searchId = searchTraceId,
+    conditionIds: string[] = [],
   ) => {
     if (!feedbackEnabled) {
       throw new Error("추천 피드백 수집이 현재 비활성화되어 있습니다.");
@@ -934,6 +950,7 @@ export default function Home() {
         feedbackType,
         reason: reasons[0] ?? "",
         reasons,
+        conditionIds,
         source,
       }),
     });
@@ -956,6 +973,25 @@ export default function Home() {
         feedbackType,
         reasons,
         "detail",
+        searchTraceId,
+        semanticConditions
+          .filter((condition) => {
+            if (feedbackType === "positive") {
+              return ["target", "action", "intent"].includes(condition.role);
+            }
+            return reasons.some((reason) => {
+              const rolesByReason: Record<string, string[]> = {
+                "검색 주제와 다름": ["target", "action", "intent"],
+                "업무 구분이 다름": ["category"],
+                "지역이 맞지 않음": ["region"],
+                "사업금액이 맞지 않음": ["budget"],
+                "계약방법이 맞지 않음": ["contract_method"],
+                "수요기관이 맞지 않음": ["demand_agency"],
+              };
+              return (rolesByReason[reason] ?? []).includes(condition.role);
+            });
+          })
+          .map((condition) => condition.id),
       );
       let nextFeedback: Bid["sessionFeedback"] = (
         feedbackType === "positive" || feedbackType === "negative"
@@ -1043,7 +1079,6 @@ export default function Home() {
     setSemanticQuery(query);
     setSemanticQueryActive(false);
     setInterpretedConditions([]);
-    setSemanticEngine("");
     setSearchTrace([]);
     setSearchTraceId("");
     setSearchElapsedMs(0);
@@ -1072,7 +1107,6 @@ export default function Home() {
     searchAbortControllerRef.current?.abort();
     setSemanticQueryActive(Boolean(nextSemanticQuery.trim()));
     setInterpretedConditions([]);
-    setSemanticEngine("");
     setSearchTrace([]);
     setSearchTraceId("");
     setSearchElapsedMs(0);
@@ -1566,6 +1600,7 @@ export default function Home() {
                     prepareSemanticAnalysisState("");
                   }}
                 >
+                  <span aria-hidden="true">×</span>
                   입력 지우기
                 </button>
                 <div className="semantic-history" ref={semanticHistoryRef}>
@@ -1631,7 +1666,6 @@ export default function Home() {
                   setSemanticQuery(event.target.value);
                   setSemanticQueryActive(false);
                   setInterpretedConditions([]);
-                  setSemanticEngine("");
                 }}
                 onKeyDown={(event) => {
                   if (
@@ -1680,12 +1714,12 @@ export default function Home() {
                     aria-controls="search-trace-panel"
                     title={
                       searchTraceId
-                        ? `검색 과정 보기 · ${searchElapsedMs.toLocaleString("ko-KR")}ms · ${searchTraceId}`
-                        : `검색 과정 보기 · ${searchElapsedMs.toLocaleString("ko-KR")}ms`
+                        ? `검색 과정 · ${searchElapsedMs.toLocaleString("ko-KR")}ms · ${searchTraceId}`
+                        : `검색 과정 · ${searchElapsedMs.toLocaleString("ko-KR")}ms`
                     }
                     onClick={() => setSearchTraceOpen((open) => !open)}
                   >
-                    <span>검색 과정 보기</span>
+                    <span>검색 과정</span>
                     <small>{searchElapsedMs.toLocaleString("ko-KR")}ms</small>
                     <span aria-hidden="true">{searchTraceOpen ? "−" : "+"}</span>
                   </button>
@@ -1709,9 +1743,6 @@ export default function Home() {
                   )
                 ) : (
                   <span>자연어 검색어를 입력해 주세요.</span>
-                )}
-                {semanticQueryActive && semanticEngine && (
-                  <span title={`사용 모델: ${semanticEngine}`}>의미 벡터 적용</span>
                 )}
               </div>
               {searchTrace.length > 0 && searchTraceOpen && (
@@ -1906,13 +1937,6 @@ export default function Home() {
           </button>
           */}
           <button
-            className="apply-button"
-            type="button"
-            onClick={openSaveSearch}
-          >
-            ＋ 검색조건 저장/선택
-          </button>
-          <button
             className="reset-button"
             type="button"
             onClick={() => {
@@ -1937,7 +1961,15 @@ export default function Home() {
               runSearchNow(resetSnapshot);
             }}
           >
+            <span aria-hidden="true">×</span>
             조건 초기화
+          </button>
+          <button
+            className="apply-button"
+            type="button"
+            onClick={openSaveSearch}
+          >
+            ＋ 검색조건 저장/선택
           </button>
 
           {/* Profile Health */}
@@ -2069,12 +2101,6 @@ export default function Home() {
             ) : (
               filteredBids.map((bid, index) => (
                 <article className="bid-card" key={bid.id}>
-                  <span
-                    className="bid-sequence"
-                    aria-label={`검색결과 ${(currentPage - 1) * PAGE_SIZE + index + 1}번`}
-                  >
-                    {(currentPage - 1) * PAGE_SIZE + index + 1}
-                  </span>
                   <div className="bid-score">
                     <ScoreRing score={bid.score} />
                     <StatusBadge value={bid.eligibility} />
@@ -2084,6 +2110,12 @@ export default function Home() {
                   </div>
                   <div className="bid-content">
                     <div className="bid-meta-top">
+                      <span
+                        className="bid-sequence"
+                        aria-label={`검색결과 ${(currentPage - 1) * PAGE_SIZE + index + 1}번`}
+                      >
+                        {(currentPage - 1) * PAGE_SIZE + index + 1}
+                      </span>
                       <span className={`category category-${bid.category}`}>{bid.category}</span>
                       {bid.isNew && <span className="new-label">NEW</span>}
                       <span>{bid.noticeNo}</span>
@@ -2246,7 +2278,7 @@ export default function Home() {
 
           <div className="source-note">
             <span>ⓘ</span>
-            {searchError || "외부 입찰공고 데이터베이스의 실시간 검색결과입니다."}
+            {searchError || "G2B 입찰공고 데이터베이스의 실시간 검색결과입니다."}
           </div>
         </div>
       </section>
@@ -2646,7 +2678,7 @@ export default function Home() {
                 type="button"
                 onClick={() => void toggleSaved(selected)}
               >
-                {saved.includes(selected.id) ? "◆ 저장됨" : "◇ 관심공고 저장"}
+                {saved.includes(selected.id) ? "◆ 관심공고 저장됨" : "◇ 관심공고 저장"}
               </button>
               <OriginalNoticeAction bid={selected} />
             </div>

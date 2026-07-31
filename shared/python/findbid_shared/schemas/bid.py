@@ -93,6 +93,7 @@ class QueryPlan(CamelModel):
     keywords: dict = Field(default_factory=dict)
     semantic_query: str = ""
     interpreted_conditions: list[str] = Field(default_factory=list)
+    semantic_conditions: list[dict] = Field(default_factory=list)
     semantic_engine: str = ""
     search_id: str = ""
     search_trace: list[str] = Field(default_factory=list)
@@ -119,6 +120,7 @@ class FeedbackRequest(CamelModel):
     feedback_type: str = Field(pattern="^(positive|negative|exclude|clear)$")
     reason: str = Field(default="", max_length=80)
     reasons: list[str] = Field(default_factory=list, max_length=9)
+    condition_ids: list[str] = Field(default_factory=list, max_length=30)
     source: str = Field(default="detail", pattern="^(favorite|detail)$")
 
 

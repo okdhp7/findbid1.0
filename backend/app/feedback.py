@@ -73,6 +73,48 @@ def _same_budget_band(left: int, right: int) -> bool:
     return abs(left - right) <= max(100_000_000, round(max(left, right) * 0.35))
 
 
+def _condition_matches_record(
+    record: BidRecord,
+    condition: dict[str, Any],
+) -> bool:
+    kind = str(condition.get("kind", ""))
+    value = str(condition.get("value", "")).strip().lower()
+    if not value:
+        return False
+    if kind == "category":
+        return record.category.lower() == value
+    if kind == "region":
+        return record.region.lower() == value
+    if kind == "contract_method":
+        return value in record.contract_method.lower()
+    if kind == "demand_agency":
+        return value in record.demand_agency.lower()
+    if kind != "semantic":
+        return False
+
+    variants = condition.get("variants")
+    normalized_variants = (
+        [
+            str(variant).strip().lower()
+            for variant in variants
+            if str(variant).strip()
+        ]
+        if isinstance(variants, list)
+        else [value]
+    )
+    corpus = " ".join(
+        [
+            record.title,
+            record.summary,
+            record.category,
+            *record.tags,
+            *record.matched,
+            *record.matched_conditions,
+        ]
+    ).lower()
+    return any(variant in corpus for variant in normalized_variants)
+
+
 def apply_feedback_adjustments(
     records: list[BidRecord],
     feedback: dict[str, dict[str, Any]],
@@ -139,8 +181,36 @@ def apply_feedback_adjustments(
                 if str(tag).strip()
             }
             record_tags = {tag.strip().lower() for tag in record.tags if tag.strip()}
+            stored_conditions = item.get("conditions")
+            feedback_conditions = (
+                [
+                    condition
+                    for condition in stored_conditions
+                    if isinstance(condition, dict)
+                ]
+                if isinstance(stored_conditions, list)
+                else []
+            )
+            topic_condition_applied = False
+            for condition in feedback_conditions:
+                if (
+                    condition.get("kind") != "semantic"
+                    or not _condition_matches_record(record, condition)
+                ):
+                    continue
+                mode = str(condition.get("mode", "boost"))
+                condition_weight = 2 if mode in {"must", "should"} else 1
+                adjustment += condition_weight * sign
+                topic_condition_applied = True
+
             for reason in reasons:
                 if reason == "이미 확인한 공고":
+                    continue
+                if reason == "검색 주제와 다름" and topic_condition_applied:
+                    continue
+                if reason == "업무 구분이 다름":
+                    if record.category == features.get("category"):
+                        adjustment += 2 * sign
                     continue
                 if reason == "계약방법이 맞지 않음":
                     if record.contract_method == features.get("contractMethod"):
@@ -259,6 +329,7 @@ class FeedbackStore:
         search_id: str,
         fingerprint: str,
         records: list[BidRecord],
+        search_conditions: list[dict[str, Any]] | None = None,
     ) -> None:
         session_id = normalize_session_id(session_id)
         if not session_id:
@@ -270,6 +341,7 @@ class FeedbackStore:
                     record.id: _record_features(record)
                     for record in records
                 },
+                "conditions": search_conditions or [],
             }
             self.redis.setex(
                 self._impression_key(session_id, search_id),
@@ -360,6 +432,34 @@ class FeedbackStore:
                     )
                 ):
                     raise ValueError("부적합 사유를 선택해 주세요.")
+                available_conditions = {
+                    str(condition.get("id", "")): condition
+                    for condition in impression.get("conditions", [])
+                    if isinstance(condition, dict)
+                    and str(condition.get("id", ""))
+                }
+                requested_condition_ids = list(dict.fromkeys(
+                    condition_id.strip()
+                    for condition_id in request.condition_ids
+                    if condition_id.strip()
+                ))
+                invalid_condition_ids = [
+                    condition_id
+                    for condition_id in requested_condition_ids
+                    if condition_id not in available_conditions
+                ]
+                if invalid_condition_ids:
+                    raise ValueError("현재 검색에 포함되지 않은 조건입니다.")
+                selected_conditions = [
+                    available_conditions[condition_id]
+                    for condition_id in requested_condition_ids
+                ]
+                if not selected_conditions:
+                    selected_conditions = self._conditions_for_feedback(
+                        list(available_conditions.values()),
+                        request.feedback_type,
+                        reasons,
+                    )
                 if not (
                     request.source == "favorite"
                     and existing.get("source") == "detail"
@@ -374,6 +474,7 @@ class FeedbackStore:
                                 "reasons": reasons,
                                 "source": request.source,
                                 "features": bids[request.bid_id],
+                                "conditions": selected_conditions,
                                 "updatedAt": int(time()),
                             },
                             ensure_ascii=False,
@@ -387,6 +488,38 @@ class FeedbackStore:
         except Exception as error:
             logger.warning("세션 피드백 저장에 실패했습니다.", exc_info=True)
             raise RuntimeError("피드백을 임시 저장하지 못했습니다.") from error
+
+    @staticmethod
+    def _conditions_for_feedback(
+        conditions: list[dict[str, Any]],
+        feedback_type: str,
+        reasons: list[str],
+    ) -> list[dict[str, Any]]:
+        if feedback_type == "positive":
+            return [
+                condition
+                for condition in conditions
+                if condition.get("role") in {"target", "action", "intent"}
+            ]
+
+        roles_by_reason = {
+            "검색 주제와 다름": {"target", "action", "intent"},
+            "업무 구분이 다름": {"category"},
+            "지역이 맞지 않음": {"region"},
+            "사업금액이 맞지 않음": {"budget"},
+            "계약방법이 맞지 않음": {"contract_method"},
+            "수요기관이 맞지 않음": {"demand_agency"},
+        }
+        selected_roles = {
+            role
+            for reason in reasons
+            for role in roles_by_reason.get(reason, set())
+        }
+        return [
+            condition
+            for condition in conditions
+            if condition.get("role") in selected_roles
+        ]
 
     def status(self) -> dict[str, Any]:
         now = int(time())
