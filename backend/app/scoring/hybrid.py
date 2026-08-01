@@ -215,6 +215,91 @@ def _license_matches(requirement: str, licenses: list[str]) -> bool:
     return False
 
 
+def _recommendation_confidence(
+    *,
+    corpus: str,
+    budget: int,
+    deadline_known: bool,
+    required_licenses: list[str],
+    region_restriction: str,
+    sme_only: bool,
+    semantic_similarity: int | None,
+    search_condition_values: list[str],
+    capability_values: list[str],
+    experiences: list[str],
+    effective_max_budget: int | None,
+    request: SearchRequest,
+    company_profile: dict[str, Any],
+    breakdown: dict[str, int],
+    unresolved: list[str],
+) -> int:
+    """추천점수를 뒷받침하는 데이터와 평가 근거의 신뢰도를 계산한다."""
+    profile_quality = max(
+        0,
+        min(100, int(company_profile.get("completion", 0))),
+    )
+
+    unique_corpus_tokens = set(_tokens(corpus))
+    corpus_quality = min(100, round(len(unique_corpus_tokens) / 18 * 100))
+    qualification_quality = (
+        100
+        if required_licenses or region_restriction.strip() or sme_only
+        else 70
+    )
+    semantic_data_quality = (
+        100
+        if semantic_similarity is not None
+        else 70
+        if search_condition_values
+        else 50
+    )
+    bid_data_quality = round(
+        corpus_quality * 0.35
+        + (100 if budget > 0 else 0) * 0.20
+        + (100 if deadline_known else 0) * 0.20
+        + qualification_quality * 0.10
+        + semantic_data_quality * 0.15
+    )
+
+    active_scores = [breakdown["필수자격"]]
+    if search_condition_values or semantic_similarity is not None:
+        active_scores.append(breakdown["의미 유사도"])
+    if capability_values:
+        active_scores.append(breakdown["보유 기술"])
+    if experiences:
+        active_scores.append(breakdown["유사 수행실적"])
+    if request.include_keywords:
+        active_scores.append(breakdown["검색 키워드"])
+    if region_restriction.strip():
+        active_scores.append(breakdown["참가 지역"])
+    if budget > 0 and effective_max_budget:
+        active_scores.append(breakdown["사업 금액"])
+    if deadline_known:
+        active_scores.append(breakdown["수행 준비도"])
+
+    evidence_clarity = round(
+        sum(abs(score - 50) * 2 for score in active_scores)
+        / len(active_scores)
+    )
+    analysis_quality = (
+        100
+        if semantic_similarity is not None
+        else 72
+        if search_condition_values
+        else 55
+    )
+    unresolved_penalty = min(28, len(unresolved) * 7)
+
+    confidence = round(
+        profile_quality * 0.30
+        + bid_data_quality * 0.30
+        + evidence_clarity * 0.25
+        + analysis_quality * 0.15
+        - unresolved_penalty
+    )
+    return max(0, min(100, confidence))
+
+
 def calculate_hybrid_score(
     *,
     corpus: str,
@@ -378,22 +463,23 @@ def calculate_hybrid_score(
     else:
         eligibility = "참가 가능"
 
-    profile_completion = int(company_profile.get("completion", 0))
-    bid_completeness = round(
-        sum(
-            bool(value)
-            for value in (
-                normalized_corpus,
-                budget,
-                deadline_known,
-                required_licenses or "면허 제한 없음",
-                region_restriction or "지역 제한 없음",
-            )
-        )
-        / 5
-        * 100
+    confidence = _recommendation_confidence(
+        corpus=corpus,
+        budget=budget,
+        deadline_known=deadline_known,
+        required_licenses=required_licenses,
+        region_restriction=region_restriction,
+        sme_only=sme_only,
+        semantic_similarity=semantic_similarity,
+        search_condition_values=search_condition_values,
+        capability_values=capability_values,
+        experiences=experiences,
+        effective_max_budget=effective_max_budget,
+        request=request,
+        company_profile=company_profile,
+        breakdown=breakdown,
+        unresolved=unresolved,
     )
-    confidence = round(profile_completion * 0.65 + bid_completeness * 0.35)
 
     matched = search_condition_matches
     reasons: list[str] = []

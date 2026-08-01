@@ -7,6 +7,7 @@ import {
   type BidAttachment,
   type CompanyProfile,
 } from "../lib/bids";
+import { SiteFooter } from "./_components/site-footer";
 
 const categories = ["전체", "용역", "물품", "공사"] as const;
 const regions = [
@@ -287,10 +288,28 @@ function normalizeRegionFilter(region: string) {
   return region === "전국" ? "전체 지역" : region;
 }
 
+function companyProfileInitials(name: string): string {
+  const normalized = name
+    .trim()
+    .replace(/^(?:주식회사|유한회사|합자회사|합명회사|㈜|\(주\)|（주）)\s*/, "")
+    .trim();
+  const words = normalized.match(/[A-Za-z0-9가-힣]+/g) ?? [];
+  if (words.length === 0) return "기업";
+
+  const firstWord = words[0];
+  if (/^[A-Za-z]/.test(firstWord)) {
+    if (words.length > 1 && /^[A-Za-z0-9]/.test(words[1])) {
+      return `${firstWord[0]}${words[1][0]}`.toUpperCase();
+    }
+    return firstWord.slice(0, 2).toUpperCase();
+  }
+  return Array.from(firstWord).slice(0, 2).join("");
+}
+
 function Mark({ children }: { children: React.ReactNode }) {
   return (
     <span className="brand-mark" aria-hidden="true">
-      {children}
+      <span className="profile-initials">{children}</span>
     </span>
   );
 }
@@ -1475,7 +1494,8 @@ export default function Home() {
       <header className="topbar">
         <a className="logo" href="#top" aria-label="FindBid 홈">
           <span className="logo-symbol" aria-hidden="true">
-            <img src="/findbid-b-icon.png" alt="" />
+            <img className="logo-mark logo-mark-light" src="/findbid-b-icon-3x.png" alt="" />
+            <img className="logo-mark logo-mark-dark" src="/findbid-b-icon-3x-dark.png" alt="" />
           </span>
           <span className="logo-copy">
             <strong>
@@ -1556,7 +1576,9 @@ export default function Home() {
             )}
           </button>
           <button className="profile-button" type="button" onClick={openCompanyProfile}>
-            <span className="avatar">IB</span>
+            <span className="avatar" aria-hidden="true">
+              <span className="profile-initials">{companyProfileInitials(companyProfile.name)}</span>
+            </span>
             <span className="profile-copy">
               <strong>{companyProfile.name}</strong>
               <small>프로필 {companyProfile.completion}% 완성</small>
@@ -1910,7 +1932,7 @@ export default function Home() {
                   0,
                 );
               }}
-              label="참가 가능 공고만"
+              label="참가 가능"
             />
             <Toggle
               checked={closingSoon}
@@ -1976,7 +1998,7 @@ export default function Home() {
           <div className="profile-health">
             <div className="health-head">
               <div>
-                <Mark>IB</Mark>
+                <Mark>{companyProfileInitials(companyProfile.name)}</Mark>
                 <span>
                   <strong>기업 프로필</strong>
                   <small>매칭 정확도를 높여보세요</small>
@@ -2455,7 +2477,7 @@ export default function Home() {
                 <h2>{selected.title}</h2>
                 <p>{selected.agency} · {selected.demandAgency}</p>
                 <span className="score-confidence">
-                  점수 신뢰도 {selected.scoreConfidence ?? 0}%
+                  추천 신뢰도 {selected.scoreConfidence ?? 0}%
                 </span>
               </div>
             </div>
@@ -2981,7 +3003,7 @@ export default function Home() {
             >
               ×
             </button>
-            <Mark>IB</Mark>
+            <Mark>{companyProfileInitials(companyProfile.name)}</Mark>
             <span className="section-kicker">COMPANY PROFILE</span>
             <h2>{companyProfile.name}</h2>
             <p>기업 정보를 기반으로 공고 참가 가능성과 사업 적합도를 분석합니다.</p>
@@ -3171,6 +3193,8 @@ export default function Home() {
           ✓ {saveNotice}
         </div>
       )}
+
+      <SiteFooter />
 
       {/* ── Mobile Dock ── */}
       <nav className="mobile-dock" aria-label="모바일 주요 메뉴">

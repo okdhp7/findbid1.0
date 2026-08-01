@@ -38,6 +38,75 @@ def test_profile_matching_bid_scores_higher_than_unrelated_bid() -> None:
     assert matching.breakdown["보유 기술"] > unrelated.breakdown["보유 기술"]
 
 
+def test_recommendation_confidence_uses_bid_evidence_not_only_profile_completion() -> None:
+    complete_profile = {
+        **COMPANY_PROFILE,
+        "experiences": ["AI 플랫폼 구축"],
+        "preferred_max_budget": 500_000_000,
+        "completion": 100,
+    }
+    request = SearchRequest(
+        semantic_query="생성형 AI 플랫폼 구축",
+        include_keywords=["AI", "플랫폼"],
+        max_budget=500_000_000,
+    )
+    complete = calculate_hybrid_score(
+        corpus="생성형 AI 플랫폼 구축과 운영을 위한 상세 과업 및 기술 요구사항",
+        budget=400_000_000,
+        days_left=12,
+        deadline_known=True,
+        is_new=True,
+        required_licenses=["소프트웨어사업자"],
+        region_restriction="경기도",
+        sme_only=True,
+        request=request,
+        company_profile=complete_profile,
+        semantic_similarity=92,
+    )
+    incomplete = calculate_hybrid_score(
+        corpus="AI 사업",
+        budget=0,
+        days_left=0,
+        deadline_known=False,
+        is_new=True,
+        required_licenses=[],
+        region_restriction="",
+        sme_only=False,
+        request=request,
+        company_profile=complete_profile,
+        semantic_similarity=None,
+    )
+
+    assert complete.confidence < 100
+    assert incomplete.confidence < complete.confidence
+
+
+def test_unresolved_requirements_reduce_recommendation_confidence() -> None:
+    common = {
+        "corpus": "부산 지역 AI 플랫폼 구축 사업의 상세 과업과 참가자격",
+        "budget": 300_000_000,
+        "days_left": 10,
+        "deadline_known": True,
+        "is_new": True,
+        "required_licenses": [],
+        "sme_only": False,
+        "request": SearchRequest(semantic_query="AI 플랫폼 구축"),
+        "company_profile": {**COMPANY_PROFILE, "completion": 100},
+        "semantic_similarity": 85,
+    }
+    nationwide = calculate_hybrid_score(
+        **common,
+        region_restriction="",
+    )
+    region_mismatch = calculate_hybrid_score(
+        **common,
+        region_restriction="부산광역시",
+    )
+
+    assert region_mismatch.unresolved_requirements
+    assert region_mismatch.confidence < nationwide.confidence
+
+
 def test_region_failure_caps_score_and_exposes_reason() -> None:
     result = calculate_hybrid_score(
         corpus="생성형 AI Java React 플랫폼 구축",

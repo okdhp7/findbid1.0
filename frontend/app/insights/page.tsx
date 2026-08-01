@@ -6,6 +6,7 @@ import {
   type Bid,
   type CompanyProfile,
 } from "../../lib/bids";
+import { SiteFooter } from "../_components/site-footer";
 
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const INSIGHT_PAGE_SIZE = 200;
@@ -249,7 +250,8 @@ export default function InsightsPage() {
       <header className="topbar">
         <a className="logo" href="/" aria-label="FindBid 입찰탐색으로 이동">
           <span className="logo-symbol" aria-hidden="true">
-            <img src="/findbid-b-icon.png" alt="" />
+            <img className="logo-mark logo-mark-light" src="/findbid-b-icon-3x.png" alt="" />
+            <img className="logo-mark logo-mark-dark" src="/findbid-b-icon-3x-dark.png" alt="" />
           </span>
           <span className="logo-copy">
             <strong>
@@ -517,6 +519,8 @@ export default function InsightsPage() {
           </div>
         </div>
       </section>
+
+      <SiteFooter />
 
       <nav className="mobile-dock insights-mobile-dock" aria-label="모바일 주요 메뉴">
         <a href="/#search">

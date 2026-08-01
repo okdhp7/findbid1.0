@@ -354,6 +354,10 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
   assert.match(page, /const saveCompanyProfile = \(event: React\.FormEvent<HTMLFormElement>\) =>/);
   assert.match(page, /companyProfileRef\.current = nextProfile/);
   assert.match(page, /runSearchNow\(currentSearchSnapshot\(\)\)/);
+  assert.match(page, /function companyProfileInitials\(name: string\): string/);
+  assert.match(page, /companyProfileInitials\(companyProfile\.name\)/);
+  assert.doesNotMatch(page, /<Mark>IB<\/Mark>/);
+  assert.match(css, /\.profile-initials\s*\{[^}]*transform:\s*translateY\(-1px\)/s);
   assert.match(page, /className="profile-form"/);
   assert.match(page, /프로필 저장 및 검색 반영/);
   assert.match(page, /보유 면허·자격/);
@@ -505,7 +509,8 @@ test("프로필 기반 적합도와 신뢰도 및 산정 근거를 표시한다"
   assert.match(page, /averageScore:\s*number/);
   assert.match(page, /setAverageScore\(data\.averageScore\)/);
   assert.match(page, /\{averageScore\.toLocaleString\("ko-KR"\)\}/);
-  assert.match(page, /점수 신뢰도 \{selected\.scoreConfidence \?\? 0\}%/);
+  assert.match(page, /신뢰도 \{selected\.scoreConfidence \?\? 0\}%/);
+  assert.match(page, /신뢰도 \{bid\.scoreConfidence \?\? 0\}%/);
   assert.match(page, /적합도 산정 근거/);
   assert.match(page, /Object\.entries\(selected\.scoreBreakdown \?\? \{\}\)/);
   assert.match(page, /selected\.scoreReasons/);
@@ -603,16 +608,21 @@ test("요약 카드의 값과 단위는 축소된 글자 크기를 사용한다"
   assert.match(css, /@media[\s\S]*?\.app-shell \.metrics strong\s*\{[\s\S]*?font-size:\s*20px/);
 });
 
-test("FindBid 로고는 투명 배경의 B 모노그램 PNG 워드마크를 사용한다", async () => {
+test("FindBid 로고는 테마별 3배 해상도 투명 배경 PNG 워드마크를 사용한다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(page, /<img src="\/findbid-b-icon\.png" alt="" \/>/);
+  assert.match(page, /src="\/findbid-b-icon-3x\.png"/);
+  assert.match(page, /src="\/findbid-b-icon-3x-dark\.png"/);
   assert.match(page, /className="word-find">Find/);
   assert.match(page, /className="word-bid">Bid/);
   assert.match(page, /AI Bid Searcher/);
   assert.doesNotMatch(page, /id="findbid-fb-gradient"/);
   assert.match(css, /\.app-shell \.logo-symbol img/);
+  assert.doesNotMatch(css, /\.app-shell \.logo-symbol\s*\{[^}]*filter:/s);
+  assert.match(css, /\.app-shell\.dark \.logo-symbol \.logo-mark-dark/);
+  const logoHoverStyle = css.match(/\.app-shell \.logo:hover \.logo-symbol img\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.doesNotMatch(logoHoverStyle, /scale\(/);
   assert.match(css, /\.app-shell \.word-bid/);
   assert.match(css, /background-clip:\s*text/);
 });
@@ -676,4 +686,42 @@ test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 
     /\.app-shell\.insights-page \.market-bars > div\s*\{[\s\S]*?grid-template-columns:\s*56px minmax\(100px, 400px\) 72px/,
   );
   assert.match(css, /\.app-shell\.insights-page \.market-bars > div > strong\s*\{[\s\S]*?text-align:\s*right/);
+});
+
+test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", async () => {
+  const [home, insights, footer, about, privacy, terms, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/insights/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_components/site-footer.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/about/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/terms/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(home, /<SiteFooter \/>/);
+  assert.match(insights, /<SiteFooter \/>/);
+  assert.match(footer, /© 2026 INTERWEB\. All rights reserved\./);
+  assert.match(footer, /href="\/about"/);
+  assert.match(footer, /href="\/privacy"/);
+  assert.match(footer, /href="\/terms"/);
+  assert.match(footer, /mailto:help_findbid@interweb\.co\.kr/);
+  assert.match(footer, />\s*고객의 소리\s*</);
+  assert.match(footer, /navigator\.clipboard\.writeText\(CUSTOMER_EMAIL\)/);
+  assert.match(footer, /document\.execCommand\("copy"\)/);
+  assert.match(footer, /고객의 소리 이메일 주소 복사/);
+  assert.match(footer, /"주소 복사"/);
+  assert.match(footer, /"복사됨"/);
+  assert.match(about, /서비스 소개 \| FindBid/);
+  assert.match(privacy, /개인정보처리방침 \| FindBid/);
+  assert.match(terms, /이용약관 \| FindBid/);
+  assert.match(css, /\.app-shell \.site-footer/);
+  assert.match(css, /\.app-shell \.site-footer-contact button/);
+  assert.match(footer, /className="site-footer-contact-row"/);
+  assert.match(css, /\.app-shell \.site-footer-contact-row\s*\{[\s\S]*?align-items:\s*center/);
+  assert.match(
+    css,
+    /\.app-shell \.site-footer-contact button\s*\{[\s\S]*?background:\s*transparent;[\s\S]*?border:\s*0;/,
+  );
+  assert.match(css, /\.app-shell \.info-content/);
 });
