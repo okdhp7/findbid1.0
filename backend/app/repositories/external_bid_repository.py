@@ -1047,6 +1047,12 @@ class ExternalBidRepository:
             and record.days_left <= days
         )
 
+    @staticmethod
+    def _matches_eligibility(record: BidRecord, request: SearchRequest) -> bool:
+        if request.eligibility_mode == "not_eligible":
+            return record.eligibility != "참가 가능"
+        return not request.only_eligible or record.eligibility == "참가 가능"
+
     def search_with_dashboard_metrics(
         self,
         request: SearchRequest,
@@ -1070,11 +1076,16 @@ class ExternalBidRepository:
             record
             for record in base_records
             if self._closes_within(record, closing_within_days)
-            and (
-                not request.only_eligible
-                or record.eligibility == "참가 가능"
-            )
+            and self._matches_eligibility(record, request)
         ]
+        if request.sort_mode == "opportunity":
+            records.sort(
+                key=lambda record: (
+                    record.days_left,
+                    -record.score,
+                    record.id,
+                )
+            )
         total = len(records)
         average_score = (
             round(sum(record.score for record in records) / total)

@@ -13,6 +13,28 @@ const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const INSIGHT_PAGE_SIZE = 200;
 const INSIGHT_TARGET_SIZE = 1_000;
 const INSIGHT_IGNORED_TERMS = new Set(["공고", "사업", "용역", "물품", "공사", "기타"]);
+const PARTICIPATION_RESTRICTION_RULES = [
+  {
+    label: "지역 제한 불충족",
+    terms: ["지역제한", "지역 제한", "소재", "관내", "지역업체", "본점"],
+  },
+  {
+    label: "사업금액 범위 초과",
+    terms: ["금액", "예산", "사업비", "추정가격", "기초금액"],
+  },
+  {
+    label: "자격·면허 부족",
+    terms: ["면허", "자격", "직접생산", "업종", "사업자", "신고", "인증", "확인서"],
+  },
+  {
+    label: "실적 확인 필요",
+    terms: ["실적", "경력", "수행 경험"],
+  },
+  {
+    label: "계약조건 확인 필요",
+    terms: ["계약", "상주", "인력", "납품", "공급", "공동수급", "보증"],
+  },
+] as const;
 
 type InsightSearchResponse = {
   databaseTotal: number;
@@ -58,6 +80,16 @@ function formatInsightBudget(value: number): string {
   return `${Math.round(value / 10_000).toLocaleString("ko-KR")}만원`;
 }
 
+function participationRestrictionLabel(bid: Bid): string {
+  const reasonText = [
+    ...(bid.unresolvedRequirements ?? []),
+    ...bid.risks,
+  ].join(" ").toLowerCase();
+  return PARTICIPATION_RESTRICTION_RULES.find((rule) =>
+    rule.terms.some((term) => reasonText.includes(term)))?.label
+    ?? "기타 조건 확인";
+}
+
 function restoreCompanyProfile(): CompanyProfile {
   if (typeof window === "undefined") return DEFAULT_COMPANY_PROFILE;
   try {
@@ -91,6 +123,8 @@ export default function InsightsPage() {
   const [error, setError] = useState("");
   const [loadedCount, setLoadedCount] = useState(0);
   const [targetCount, setTargetCount] = useState(INSIGHT_TARGET_SIZE);
+  const [priorityOpportunities, setPriorityOpportunities] = useState<Bid[]>([]);
+  const [restrictionBids, setRestrictionBids] = useState<Bid[]>([]);
   const insightRequestIdRef = useRef(0);
 
   const loadInsights = useCallback(async (profile: CompanyProfile) => {
@@ -101,11 +135,70 @@ export default function InsightsPage() {
     setLoadedCount(0);
     setTargetCount(INSIGHT_TARGET_SIZE);
     setSearchData(EMPTY_RESPONSE);
+    setPriorityOpportunities([]);
+    setRestrictionBids([]);
     const uniqueBids = new Map<string, Bid>();
     let aggregateData: InsightSearchResponse | null = null;
     let partialFailure = false;
 
     try {
+      const priorityRequest = fetch("/api/search", {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({
+          category: "전체",
+          region: "전체 지역",
+          maxBudget: 0,
+          includeKeywords: [],
+          excludeKeywords: [],
+          onlyEligible: true,
+          closingWithinDays: 14,
+          sortMode: "opportunity",
+          semanticQuery: "",
+          companyProfile: profile,
+          page: 1,
+          limit: 3,
+        }),
+      }).then(async (response) => {
+        if (!response.ok) return null;
+        const data = await response.json() as InsightSearchResponse;
+        return Array.isArray(data.items) ? data.items.slice(0, 3) : null;
+      }).catch(() => null);
+
+      const restrictionRequest = (async () => {
+        const restrictionItems = new Map<string, Bid>();
+        const maximumRestrictionPages = Math.ceil(INSIGHT_TARGET_SIZE / INSIGHT_PAGE_SIZE);
+        for (let page = 1; page <= maximumRestrictionPages; page += 1) {
+          const response = await fetch("/api/search", {
+            method: "POST",
+            headers: { "content-type": "application/json; charset=utf-8" },
+            body: JSON.stringify({
+              category: "전체",
+              region: "전체 지역",
+              maxBudget: 0,
+              includeKeywords: [],
+              excludeKeywords: [],
+              onlyEligible: false,
+              eligibilityMode: "not_eligible",
+              closingWithinDays: null,
+              semanticQuery: "",
+              companyProfile: profile,
+              page,
+              limit: INSIGHT_PAGE_SIZE,
+            }),
+          });
+          if (!response.ok) return null;
+          const data = await response.json() as InsightSearchResponse;
+          if (!Array.isArray(data.items) || typeof data.total !== "number") return null;
+          data.items.forEach((bid) => restrictionItems.set(bid.id, bid));
+          const desiredCount = Math.min(data.total, INSIGHT_TARGET_SIZE);
+          if (restrictionItems.size >= desiredCount || data.items.length < INSIGHT_PAGE_SIZE) {
+            return [...restrictionItems.values()].slice(0, desiredCount);
+          }
+        }
+        return [...restrictionItems.values()].slice(0, INSIGHT_TARGET_SIZE);
+      })().catch(() => null);
+
       const maximumPages = Math.ceil(INSIGHT_TARGET_SIZE / INSIGHT_PAGE_SIZE);
       for (let page = 1; page <= maximumPages; page += 1) {
         let data: InsightSearchResponse;
@@ -159,14 +252,32 @@ export default function InsightsPage() {
         }
       }
 
+      const [loadedPriorityOpportunities, loadedRestrictionBids] = await Promise.all([
+        priorityRequest,
+        restrictionRequest,
+      ]);
+      if (requestId !== insightRequestIdRef.current) return;
+      if (loadedPriorityOpportunities) {
+        setPriorityOpportunities(loadedPriorityOpportunities);
+      } else {
+        partialFailure = true;
+      }
+      if (loadedRestrictionBids) {
+        setRestrictionBids(loadedRestrictionBids);
+      } else {
+        partialFailure = true;
+      }
+
       if (partialFailure && requestId === insightRequestIdRef.current) {
         setError(
-          `일부 데이터를 불러오지 못해 최신 ${uniqueBids.size.toLocaleString("ko-KR")}건으로 분석했습니다.`,
+          `일부 분석 데이터를 불러오지 못해 확인된 ${uniqueBids.size.toLocaleString("ko-KR")}건으로 표시했습니다.`,
         );
       }
     } catch {
       if (requestId !== insightRequestIdRef.current) return;
       setSearchData(EMPTY_RESPONSE);
+      setPriorityOpportunities([]);
+      setRestrictionBids([]);
       setError("인사이트 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       if (requestId === insightRequestIdRef.current) setLoading(false);
@@ -224,38 +335,28 @@ export default function InsightsPage() {
     const opportunityRate = searchData.total > 0
       ? Math.round((searchData.eligibleTotal / searchData.total) * 100)
       : 0;
-    const missedCandidates = [...searchData.items]
-      .filter((bid) =>
-        bid.eligibility !== "참가 가능"
-        && (bid.score >= 65 || (bid.unresolvedRequirements ?? []).length > 0),
-      )
-      .sort((left, right) => right.score - left.score)
-      .slice(0, 5);
-    const priorityOpportunities = [...searchData.items]
-      .filter((bid) => bid.eligibility === "참가 가능" && bid.daysLeft >= 0)
-      .sort((left, right) => {
-        const leftIsClosingSoon = left.daysLeft <= 14 ? 0 : 1;
-        const rightIsClosingSoon = right.daysLeft <= 14 ? 0 : 1;
-        return leftIsClosingSoon - rightIsClosingSoon
-          || left.daysLeft - right.daysLeft
-          || right.score - left.score;
-      })
-      .slice(0, 3);
-
+    const restrictionBreakdown = rankedInsightValues(
+      restrictionBids.map(participationRestrictionLabel),
+      6,
+    );
+    const recoverableCount = restrictionBids.filter((bid) =>
+      bid.eligibility === "확인 필요"
+      && (bid.score >= 65 || (bid.unresolvedRequirements ?? []).length > 0),
+    ).length;
     return {
       sampleSize: searchData.items.length,
       opportunityRate,
-      reviewNeededTotal: Math.max(searchData.total - searchData.eligibleTotal, 0),
       demands,
       coveredDemandCount: demands.filter((demand) => demand.covered).length,
       categoryBreakdown,
       regionBreakdown,
       contractBreakdown,
       averageBudget,
-      missedCandidates,
-      priorityOpportunities,
+      restrictedTotal: restrictionBids.length,
+      restrictionBreakdown,
+      recoverableCount,
     };
-  }, [companyProfile, searchData]);
+  }, [companyProfile, restrictionBids, searchData]);
 
   return (
     <main className={`app-shell insights-page ${theme}`}>
@@ -390,11 +491,13 @@ export default function InsightsPage() {
                     <strong>지금 검토할 공고</strong>
                     <span>참가 가능 · 14일 내 마감 우선</span>
                   </div>
-                  <Link href="/#search">전체 보기 <span aria-hidden="true">→</span></Link>
+                  <Link href="/?source=insights#search">
+                    전체 보기 <span aria-hidden="true">→</span>
+                  </Link>
                 </div>
-                {insightData.priorityOpportunities.length > 0 ? (
+                {priorityOpportunities.length > 0 ? (
                   <ol className="priority-opportunity-list">
-                    {insightData.priorityOpportunities.map((bid) => (
+                    {priorityOpportunities.map((bid) => (
                       <li key={bid.id}>
                         <span className="priority-opportunity-rank" aria-hidden="true" />
                         <a
@@ -516,50 +619,46 @@ export default function InsightsPage() {
               )}
             </article>
 
-            <article className="insight-panel missed-insight">
+            <article className="insight-panel restriction-insight">
               <div className="insight-panel-head">
                 <span className="insight-panel-icon missed" aria-hidden="true">!</span>
                 <div>
-                  <h3>놓치고 있는 공고 분석</h3>
-                  <p>높은 적합도와 미확인 자격을 우선 탐지</p>
+                  <h3>참여 제한 요인 분석</h3>
+                  <p>참가 가능 외 {insightData.restrictedTotal.toLocaleString("ko-KR")}건 전용 분석</p>
                 </div>
               </div>
-              <div className="missed-summary">
+              <div className="restriction-summary">
                 <div>
-                  <strong>{insightData.reviewNeededTotal.toLocaleString("ko-KR")}<em>건</em></strong>
-                  <span>참가 가능 외 검토 대상</span>
+                  <strong>{insightData.restrictedTotal.toLocaleString("ko-KR")}<em>건</em></strong>
+                  <span>표본 내 참여 제한 공고</span>
                 </div>
                 <div>
-                  <strong>{insightData.missedCandidates.length.toLocaleString("ko-KR")}<em>건</em></strong>
-                  <span>표본 내 우선 확인</span>
+                  <strong>{insightData.recoverableCount.toLocaleString("ko-KR")}<em>건</em></strong>
+                  <span>보완 가능성이 높은 공고</span>
                 </div>
               </div>
-              {insightData.missedCandidates.length > 0 ? (
-                <ul className="missed-list">
-                  {insightData.missedCandidates.map((bid) => {
-                    const reason = (bid.unresolvedRequirements ?? [])[0]
-                      ?? bid.risks[0]
-                      ?? "참가자격 추가 확인 필요";
-                    return (
-                      <li key={bid.id}>
-                        <a
-                          href={bid.sourceUrl || "/#search"}
-                          target={bid.sourceUrl ? "_blank" : undefined}
-                          rel={bid.sourceUrl ? "noopener noreferrer" : undefined}
-                        >
-                          <span>
-                            <strong>{bid.title}</strong>
-                            <small>{bid.score}점 · {reason}</small>
-                          </span>
-                          <em>{bid.sourceUrl ? "원문 보기 ↗" : "탐색하기 →"}</em>
-                        </a>
-                      </li>
-                    );
-                  })}
+              {insightData.restrictionBreakdown.length > 0 ? (
+                <ul className="restriction-list">
+                  {insightData.restrictionBreakdown.map((reason) => (
+                    <li key={reason.label}>
+                      <span>{reason.label}</span>
+                      <div aria-hidden="true">
+                        <i
+                          style={{
+                            width: `${Math.round(
+                              (reason.count / insightData.restrictedTotal) * 100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <strong>{reason.count.toLocaleString("ko-KR")}건</strong>
+                    </li>
+                  ))}
                 </ul>
               ) : (
-                <p className="insight-empty">별도로 확인할 고적합 누락 후보가 없습니다.</p>
+                <p className="insight-empty">현재 분석할 참여 제한 요인이 없습니다.</p>
               )}
+              <p className="restriction-footnote">공고별 주요 제한 요인 1개를 기준으로 집계했습니다.</p>
             </article>
           </div>
         </div>

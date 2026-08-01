@@ -107,6 +107,37 @@ test("검색 상세조건의 사업금액 초기값은 금액 전체이다", asy
   assert.match(page, /void runSearch\(DEFAULT_SEARCH\)/);
 });
 
+test("인사이트 전체 보기는 전용 조건에서만 14일 이내 참가 가능 공고를 검색한다", async () => {
+  const [page, insightsPage] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/insights/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(insightsPage, /href="\/\?source=insights#search"/);
+  assert.match(
+    page,
+    /const INSIGHTS_OPPORTUNITY_SEARCH: SearchSnapshot = \{[\s\S]*?onlyEligible: true,[\s\S]*?closingSoon: true,[\s\S]*?closingWithinDays: 14,/,
+  );
+  assert.match(page, /\.get\("source"\) === "insights"/);
+  assert.match(page, /setSort\("closing"\)/);
+  assert.match(page, /sortMode: "opportunity"/);
+  assert.match(page, /sortMode: snapshot\.sortMode \?\? null/);
+  assert.match(page, /void runSearch\(INSIGHTS_OPPORTUNITY_SEARCH\)/);
+  assert.match(page, /void runSearch\(DEFAULT_SEARCH\)/);
+  assert.match(
+    insightsPage,
+    /onlyEligible: true,[\s\S]*?closingWithinDays: 14,[\s\S]*?sortMode: "opportunity",[\s\S]*?limit: 3,/,
+  );
+  assert.doesNotMatch(
+    insightsPage,
+    /const priorityOpportunities = \[\.\.\.searchData\.items\]/,
+  );
+  assert.match(
+    page,
+    /closingWithinDays: snapshot\.closingWithinDays[\s\S]*?\?\? \(snapshot\.closingSoon \? 7 : null\)/,
+  );
+});
+
 test("서버가 적용한 AI 우선 조건을 프런트엔드에서 다시 상세조건으로 제한하지 않는다", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const filteredBody = page.match(
@@ -666,7 +697,7 @@ test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 
   assert.match(insights, />참여 기회 요약</);
   assert.match(insights, />기업 역량과 시장 수요 비교</);
   assert.match(insights, />입찰시장 동향</);
-  assert.match(insights, />놓치고 있는 공고 분석</);
+  assert.match(insights, />참여 제한 요인 분석</);
   assert.match(insights, /className="active" href="\/insights" aria-current="page"/);
   assert.match(insights, /const INSIGHT_PAGE_SIZE = 200/);
   assert.match(insights, /const INSIGHT_TARGET_SIZE = 1_000/);
@@ -678,7 +709,19 @@ test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 
   assert.match(css, /\.app-shell \.insight-grid/);
   assert.match(css, /\.app-shell \.demand-list/);
   assert.match(css, /\.app-shell \.market-bars/);
-  assert.match(css, /\.app-shell \.missed-list/);
+  assert.match(insights, /const PARTICIPATION_RESTRICTION_RULES/);
+  assert.match(insights, /eligibilityMode: "not_eligible"/);
+  assert.match(insights, /const \[restrictionBids, setRestrictionBids\] = useState<Bid\[]>\(\[\]\)/);
+  assert.match(insights, /restrictionBids\.map\(participationRestrictionLabel\)/);
+  assert.doesNotMatch(insights, /searchData\.items\.filter\(\(bid\) => bid\.eligibility !== "참가 가능"\)/);
+  assert.match(insights, />보완 가능성이 높은 공고</);
+  assert.match(insights, /공고별 주요 제한 요인 1개를 기준으로 집계했습니다/);
+  assert.doesNotMatch(insights, />놓치고 있는 공고 분석</);
+  assert.match(css, /\.app-shell \.restriction-list/);
+  assert.match(
+    css,
+    /\.app-shell\.insights-page \.insights-hero h1,\s*\.app-shell\.insights-page \.insight-dashboard-head h2,\s*\.app-shell\.insights-page \.insight-panel-head h3\s*\{\s*font-weight:\s*700/,
+  );
   assert.match(css, /\.app-shell\.insights-page \.insight-panel-head h3\s*\{[\s\S]*?font-size:\s*17px/);
   assert.match(css, /\.app-shell\.insights-page \.demand-list li > span\s*\{[\s\S]*?font-size:\s*13px/);
   assert.match(

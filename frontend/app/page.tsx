@@ -54,6 +54,8 @@ type SearchSnapshot = {
   semanticQuery: string;
   onlyEligible: boolean;
   closingSoon: boolean;
+  closingWithinDays?: number | null;
+  sortMode?: "opportunity" | null;
 };
 
 const DEFAULT_SEARCH: SearchSnapshot = {
@@ -65,6 +67,14 @@ const DEFAULT_SEARCH: SearchSnapshot = {
   semanticQuery: "",
   onlyEligible: false,
   closingSoon: false,
+};
+
+const INSIGHTS_OPPORTUNITY_SEARCH: SearchSnapshot = {
+  ...DEFAULT_SEARCH,
+  onlyEligible: true,
+  closingSoon: true,
+  closingWithinDays: 14,
+  sortMode: "opportunity",
 };
 
 const PAGE_SIZE = 20;
@@ -617,6 +627,12 @@ export default function Home() {
   const [semanticHistory, setSemanticHistory] = useState<string[]>([]);
   const [onlyEligible, setOnlyEligible] = useState(DEFAULT_SEARCH.onlyEligible);
   const [closingSoon, setClosingSoon] = useState(DEFAULT_SEARCH.closingSoon);
+  const [closingWithinDays, setClosingWithinDays] = useState<number | null>(
+    DEFAULT_SEARCH.closingWithinDays ?? null,
+  );
+  const [searchSortMode, setSearchSortMode] = useState<SearchSnapshot["sortMode"]>(
+    DEFAULT_SEARCH.sortMode ?? null,
+  );
   const [sort, setSort] = useState("score");
   const [searched, setSearched] = useState(false);
   const [resultBids, setResultBids] = useState<Bid[]>([]);
@@ -834,6 +850,8 @@ export default function Home() {
     semanticQuery,
     onlyEligible,
     closingSoon,
+    closingWithinDays,
+    sortMode: searchSortMode,
   });
 
   const runSearch = useCallback(async (snapshot: SearchSnapshot, page = 1) => {
@@ -857,7 +875,9 @@ export default function Home() {
           includeKeywords: snapshot.includeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
           excludeKeywords: snapshot.excludeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
           onlyEligible: snapshot.onlyEligible,
-          closingWithinDays: snapshot.closingSoon ? 7 : null,
+          closingWithinDays: snapshot.closingWithinDays
+            ?? (snapshot.closingSoon ? 7 : null),
+          sortMode: snapshot.sortMode ?? null,
           semanticQuery: snapshot.semanticQuery,
           companyProfile: companyProfileRef.current,
           page,
@@ -1162,6 +1182,17 @@ export default function Home() {
 
   useEffect(() => {
     const initialSearch = window.setTimeout(() => {
+      const isInsightsOpportunitySearch = new URLSearchParams(window.location.search)
+        .get("source") === "insights";
+      if (isInsightsOpportunitySearch) {
+        setOnlyEligible(true);
+        setClosingSoon(true);
+        setClosingWithinDays(14);
+        setSearchSortMode("opportunity");
+        setSort("closing");
+        void runSearch(INSIGHTS_OPPORTUNITY_SEARCH);
+        return;
+      }
       void runSearch(DEFAULT_SEARCH);
     }, 0);
     return () => {
@@ -1307,6 +1338,10 @@ export default function Home() {
     prepareSemanticAnalysisState(snapshot.semanticQuery);
     setOnlyEligible(snapshot.onlyEligible);
     setClosingSoon(snapshot.closingSoon);
+    setClosingWithinDays(
+      snapshot.closingWithinDays ?? (snapshot.closingSoon ? 7 : null),
+    );
+    setSearchSortMode(snapshot.sortMode ?? null);
     setSaveSearchOpen(false);
     showSaveNotice(`‘${savedSearch.name}’ 조건을 적용했습니다.`);
     runSearchNow(snapshot);
@@ -1938,13 +1973,19 @@ export default function Home() {
               checked={closingSoon}
               onChange={() => {
                 const nextClosingSoon = !closingSoon;
+                const nextClosingWithinDays = nextClosingSoon ? 7 : null;
                 setClosingSoon(nextClosingSoon);
+                setClosingWithinDays(nextClosingWithinDays);
                 scheduleDetailSearch(
-                  { ...currentSearchSnapshot(), closingSoon: nextClosingSoon },
+                  {
+                    ...currentSearchSnapshot(),
+                    closingSoon: nextClosingSoon,
+                    closingWithinDays: nextClosingWithinDays,
+                  },
                   0,
                 );
               }}
-              label="7일 이내 마감"
+              label={closingWithinDays === 14 ? "14일 이내 마감" : "7일 이내 마감"}
             />
           </div>
 
@@ -1971,6 +2012,8 @@ export default function Home() {
                 excludeKeyword: "",
                 onlyEligible: false,
                 closingSoon: false,
+                closingWithinDays: null,
+                sortMode: null,
               };
               setCategory("전체");
               setRegion("전체 지역");
@@ -1980,6 +2023,8 @@ export default function Home() {
               prepareSemanticAnalysisState(resetSnapshot.semanticQuery);
               setOnlyEligible(false);
               setClosingSoon(false);
+              setClosingWithinDays(null);
+              setSearchSortMode(null);
               runSearchNow(resetSnapshot);
             }}
           >

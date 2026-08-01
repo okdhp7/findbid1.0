@@ -1809,7 +1809,7 @@ a { color: inherit; text-decoration: none; }
 
 .app-shell .opportunity-summary span,
 .app-shell .market-summary span,
-.app-shell .missed-summary span {
+.app-shell .restriction-summary span {
   color: var(--muted);
   font-size: 10px;
 }
@@ -1821,7 +1821,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .app-shell .opportunity-summary em,
-.app-shell .missed-summary em {
+.app-shell .restriction-summary em {
   color: var(--muted);
   font-size: 10px;
   font-style: normal;
@@ -2015,8 +2015,7 @@ a { color: inherit; text-decoration: none; }
   min-width: 2px;
 }
 
-.app-shell .demand-list,
-.app-shell .missed-list {
+.app-shell .demand-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2131,14 +2130,14 @@ a { color: inherit; text-decoration: none; }
   padding-top: 9px;
 }
 
-.app-shell .missed-summary {
+.app-shell .restriction-summary {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 10px;
 }
 
-.app-shell .missed-summary > div {
+.app-shell .restriction-summary > div {
   background: var(--panel-soft);
   border-radius: 9px;
   display: flex;
@@ -2146,65 +2145,61 @@ a { color: inherit; text-decoration: none; }
   padding: 9px 10px;
 }
 
-.app-shell .missed-summary strong {
+.app-shell .restriction-summary strong {
   color: var(--text);
   font-size: 16px;
 }
 
-.app-shell .missed-list li {
-  border-top: 1px solid var(--border);
-}
-
-.app-shell .missed-list button,
-.app-shell .missed-list a {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 7px 0 0;
-  text-align: left;
-  width: 100%;
-}
-
-.app-shell .missed-list button > span,
-.app-shell .missed-list a > span {
+.app-shell .restriction-list {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.app-shell .missed-list button strong,
-.app-shell .missed-list a strong {
+.app-shell .restriction-list li {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(90px, 1fr) 48px;
+  padding: 9px 0;
+}
+
+.app-shell .restriction-list li > span {
   color: var(--text-soft);
   font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.app-shell .missed-list button small,
-.app-shell .missed-list a small {
-  color: var(--muted);
-  font-size: 9px;
+.app-shell .restriction-list li > div {
+  background: var(--panel-soft);
+  border-radius: 999px;
+  height: 7px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.app-shell .missed-list button em,
-.app-shell .missed-list a em {
-  color: var(--accent-light);
-  flex-shrink: 0;
+.app-shell .restriction-list li > div i {
+  background: linear-gradient(90deg, var(--red), var(--amber));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 2px;
+}
+
+.app-shell .restriction-list li > strong {
+  color: var(--text);
   font-size: 10px;
-  font-style: normal;
   font-weight: 700;
+  text-align: right;
 }
 
-.app-shell .missed-list button:hover strong,
-.app-shell .missed-list a:hover strong {
-  color: var(--accent-light);
+.app-shell .restriction-footnote {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  margin: 2px 0 0;
+  padding-top: 9px;
 }
 
 .app-shell .insight-empty {
@@ -2218,6 +2213,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Insights page typography */
+.app-shell.insights-page .insights-hero h1,
+.app-shell.insights-page .insight-dashboard-head h2,
+.app-shell.insights-page .insight-panel-head h3 {
+  font-weight: 700;
+}
+
 .app-shell.insights-page .insights-hero p {
   font-size: 16px;
 }
@@ -2248,7 +2249,7 @@ a { color: inherit; text-decoration: none; }
 
 .app-shell.insights-page .opportunity-summary span,
 .app-shell.insights-page .market-summary span,
-.app-shell.insights-page .missed-summary span {
+.app-shell.insights-page .restriction-summary span {
   font-size: 12px;
 }
 
@@ -2257,7 +2258,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .app-shell.insights-page .opportunity-summary em,
-.app-shell.insights-page .missed-summary em {
+.app-shell.insights-page .restriction-summary em {
   font-size: 12px;
 }
 
@@ -2341,22 +2342,16 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 
-.app-shell.insights-page .missed-summary strong {
+.app-shell.insights-page .restriction-summary strong {
   font-size: 19px;
 }
 
-.app-shell.insights-page .missed-list button strong,
-.app-shell.insights-page .missed-list a strong {
+.app-shell.insights-page .restriction-list li > span {
   font-size: 13px;
 }
 
-.app-shell.insights-page .missed-list button small,
-.app-shell.insights-page .missed-list a small {
-  font-size: 11px;
-}
-
-.app-shell.insights-page .missed-list button em,
-.app-shell.insights-page .missed-list a em {
+.app-shell.insights-page .restriction-list li > strong,
+.app-shell.insights-page .restriction-footnote {
   font-size: 12px;
 }
 
@@ -5664,6 +5659,10 @@ a { color: inherit; text-decoration: none; }
   .app-shell .insight-callout > p {
     grid-column: 1 / -1;
     text-align: left;
+  }
+
+  .app-shell .restriction-list li {
+    grid-template-columns: minmax(0, 1fr) 72px 42px;
   }
 
   .app-shell .market-summary {

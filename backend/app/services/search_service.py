@@ -159,6 +159,14 @@ class SearchService:
                 get_settings().feedback_adjustment_limit,
             )
             if feedback_applied:
+                if request.sort_mode == "opportunity":
+                    records.sort(
+                        key=lambda record: (
+                            record.days_left,
+                            -record.score,
+                            record.id,
+                        )
+                    )
                 total = len(records)
                 average_score = (
                     round(sum(item.score for item in records) / len(records))

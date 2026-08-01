@@ -68,6 +68,60 @@ def test_dashboard_metrics_reuse_one_ranked_result() -> None:
     assert calls[0].page == 1
 
 
+def test_opportunity_sort_is_opt_in_and_runs_before_pagination() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    base_records = [
+        _record("high-score", score=95, eligibility="참가 가능", days_left=10),
+        _record("urgent", score=70, eligibility="참가 가능", days_left=2),
+        _record("same-day-high", score=85, eligibility="참가 가능", days_left=2),
+    ]
+    repository._ranked_records = lambda request: list(base_records)
+
+    default_records, *_ = repository.search_with_dashboard_metrics(
+        SearchRequest(only_eligible=True, closing_within_days=14)
+    )
+    opportunity_records, *_ = repository.search_with_dashboard_metrics(
+        SearchRequest(
+            only_eligible=True,
+            closing_within_days=14,
+            sort_mode="opportunity",
+        )
+    )
+
+    assert [record.id for record in default_records] == [
+        "high-score",
+        "urgent",
+        "same-day-high",
+    ]
+    assert [record.id for record in opportunity_records] == [
+        "same-day-high",
+        "urgent",
+        "high-score",
+    ]
+
+
+def test_not_eligible_mode_is_opt_in() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    base_records = [
+        _record("eligible", score=90, eligibility="참가 가능", days_left=2),
+        _record("review", score=80, eligibility="확인 필요", days_left=3),
+        _record("difficult", score=70, eligibility="참가 어려움", days_left=4),
+    ]
+    repository._ranked_records = lambda request: list(base_records)
+
+    default_records, *_ = repository.search_with_dashboard_metrics(SearchRequest())
+    restricted_records, *_ = repository.search_with_dashboard_metrics(
+        SearchRequest(eligibility_mode="not_eligible")
+    )
+
+    assert [record.id for record in default_records] == [
+        "eligible",
+        "review",
+        "difficult",
+    ]
+    assert [record.id for record in restricted_records] == ["review", "difficult"]
+
+
 def test_semantic_cache_key_is_shared_between_pages() -> None:
     first_page = SearchRequest(
         semantic_query="AI 웹서비스",
