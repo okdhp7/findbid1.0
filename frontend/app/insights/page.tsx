@@ -8,6 +8,7 @@ import {
   type CompanyProfile,
 } from "../../lib/bids";
 import { SiteFooter } from "../_components/site-footer";
+import { useSharedTheme } from "../_components/use-shared-theme";
 
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const INSIGHT_PAGE_SIZE = 200;
@@ -116,7 +117,7 @@ function restoreCompanyProfile(): CompanyProfile {
 }
 
 export default function InsightsPage() {
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const { theme, toggleTheme } = useSharedTheme();
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(DEFAULT_COMPANY_PROFILE);
   const [searchData, setSearchData] = useState<InsightSearchResponse>(EMPTY_RESPONSE);
   const [loading, setLoading] = useState(true);
@@ -390,7 +391,7 @@ export default function InsightsPage() {
             </svg>
             인사이트
           </a>
-          <a href="/#alerts">
+          <a href="/notifications">
             <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
               <path d="M10 21h4" />
@@ -407,7 +408,7 @@ export default function InsightsPage() {
           <button
             className="icon-button theme-toggle"
             type="button"
-            onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+            onClick={toggleTheme}
             aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
           >
             {theme === "dark" ? "☀" : "☾"}

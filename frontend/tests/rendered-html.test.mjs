@@ -60,6 +60,34 @@ test("페이지 최상단과 공고 목록 하단 이동 기능을 제공한다"
   assert.match(css, /\.input-with-icon:focus-within\s*\{[\s\S]*?border-color:\s*transparent/);
   assert.match(css, /\.input-with-icon:focus-within\s*\{[\s\S]*?box-shadow:\s*none/);
   assert.match(css, /\.input-with-icon input:focus-visible\s*\{[\s\S]*?outline:\s*none/);
+  assert.match(css, /\.app-shell \.semantic-card\s*\{[\s\S]*?border-radius:\s*var\(--radius-xl\)/);
+  assert.match(css, /\.app-shell \.filters\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
+  assert.match(css, /\.app-shell \.bid-card\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
+  assert.match(css, /\.app-shell \.metrics article\s*\{[\s\S]*?border-radius:\s*var\(--radius-md\)/);
+});
+
+test("입찰탐색과 인사이트 페이지가 선택한 화면 테마를 공유한다", async () => {
+  const [page, insights, sharedTheme, layout, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/insights/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_components/use-shared-theme.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const \{ theme, toggleTheme \} = useSharedTheme\(\)/);
+  assert.match(insights, /const \{ theme, toggleTheme \} = useSharedTheme\(\)/);
+  assert.equal((page.match(/onClick=\{toggleTheme\}/g) ?? []).length, 1);
+  assert.equal((insights.match(/onClick=\{toggleTheme\}/g) ?? []).length, 1);
+  assert.match(sharedTheme, /findbid\.color-theme\.v1/);
+  assert.match(sharedTheme, /window\.localStorage\.getItem\(THEME_STORAGE_KEY\)/);
+  assert.match(sharedTheme, /window\.localStorage\.setItem\(THEME_STORAGE_KEY, nextTheme\)/);
+  assert.match(sharedTheme, /document\.documentElement\.dataset\.findbidTheme = theme/);
+  assert.match(layout, /themeInitializationScript/);
+  assert.match(layout, /document\.documentElement\.dataset\.findbidTheme = storedTheme/);
+  assert.match(layout, /<html lang="ko" suppressHydrationWarning>/);
+  assert.match(css, /html\[data-findbid-theme="dark"\] body\s*\{[\s\S]*?background:\s*#212121/);
+  assert.match(css, /html:not\(\[data-findbid-theme="dark"\]\) \.app-shell\.light,/);
 });
 
 test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검색한다", async () => {
@@ -718,6 +746,9 @@ test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 
   assert.match(insights, /공고별 주요 제한 요인 1개를 기준으로 집계했습니다/);
   assert.doesNotMatch(insights, />놓치고 있는 공고 분석</);
   assert.match(css, /\.app-shell \.restriction-list/);
+  assert.match(css, /\.app-shell \.insight-dashboard\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
+  assert.match(css, /\.app-shell \.insight-panel\s*\{[\s\S]*?border-radius:\s*var\(--radius-md\)/);
+  assert.match(css, /\.app-shell \.opportunity-summary > div\s*\{[\s\S]*?border-radius:\s*9px/);
   assert.match(
     css,
     /\.app-shell\.insights-page \.insights-hero h1,\s*\.app-shell\.insights-page \.insight-dashboard-head h2,\s*\.app-shell\.insights-page \.insight-panel-head h3\s*\{\s*font-weight:\s*700/,
@@ -729,6 +760,40 @@ test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 
     /\.app-shell\.insights-page \.market-bars > div\s*\{[\s\S]*?grid-template-columns:\s*56px minmax\(100px, 400px\) 72px/,
   );
   assert.match(css, /\.app-shell\.insights-page \.market-bars > div > strong\s*\{[\s\S]*?text-align:\s*right/);
+});
+
+test("알림 메뉴는 관리자 게시물과 연결된 별도 목록 페이지를 제공한다", async () => {
+  const [home, insights, notifications, admin, publicRoute, adminRoute, itemRoute, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/insights/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/notifications/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/notifications/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/notifications/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/notifications/[notificationId]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(home, /href="\/notifications"/);
+  assert.match(insights, /href="\/notifications"/);
+  assert.match(notifications, /className="active" href="\/notifications" aria-current="page"/);
+  assert.match(notifications, /fetch\("\/api\/notifications"/);
+  assert.match(notifications, /<th scope="col">게시일시<\/th><th scope="col">게시자<\/th><th scope="col">내용<\/th>/);
+  assert.match(notifications, /<SiteFooter \/>/);
+  assert.match(admin, />알림 게시물 관리</);
+  assert.match(admin, /saveNotification/);
+  assert.match(admin, /deleteNotification/);
+  assert.match(admin, /method: editing \? "PUT" : "POST"/);
+  assert.match(admin, /<th scope="col">게시일시<\/th>/);
+  assert.match(admin, /<th scope="col">게시자<\/th>/);
+  assert.match(admin, /<th scope="col">내용<\/th>/);
+  assert.match(publicRoute, /\/api\/v1\/notifications\?limit=100/);
+  assert.match(adminRoute, /isAdminAuthenticated/);
+  assert.match(adminRoute, /method: "GET" \| "POST"/);
+  assert.match(itemRoute, /method: "PUT" \| "DELETE"/);
+  assert.match(itemRoute, /x-internal-key/);
+  assert.match(css, /\.app-shell \.notifications-table/);
+  assert.match(css, /\.admin-notification-control/);
 });
 
 test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", async () => {
@@ -750,6 +815,13 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
   assert.match(footer, /href="\/terms"/);
   assert.match(footer, /mailto:help_findbid@interweb\.co\.kr/);
   assert.match(footer, />\s*고객의 소리\s*</);
+  assert.match(footer, /서비스에 대한 문의 또는 제안 사항을 보내실 수 있습니다\./);
+  assert.match(footer, /className="site-footer-contact-trigger"/);
+  assert.match(footer, /aria-controls="site-footer-contact-popover"/);
+  assert.match(footer, /aria-expanded=\{contactOpen\}/);
+  assert.match(footer, /className="site-footer-contact-popover"/);
+  assert.match(footer, /document\.addEventListener\("pointerdown", closeOutside\)/);
+  assert.match(footer, /event\.key === "Escape"/);
   assert.match(footer, /navigator\.clipboard\.writeText\(CUSTOMER_EMAIL\)/);
   assert.match(footer, /document\.execCommand\("copy"\)/);
   assert.match(footer, /고객의 소리 이메일 주소 복사/);
@@ -759,12 +831,15 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
   assert.match(privacy, /개인정보처리방침 \| FindBid/);
   assert.match(terms, /이용약관 \| FindBid/);
   assert.match(css, /\.app-shell \.site-footer/);
-  assert.match(css, /\.app-shell \.site-footer-contact button/);
+  assert.match(css, /\.app-shell \.site-footer-contact-row button/);
   assert.match(footer, /className="site-footer-contact-row"/);
   assert.match(css, /\.app-shell \.site-footer-contact-row\s*\{[\s\S]*?align-items:\s*center/);
   assert.match(
     css,
-    /\.app-shell \.site-footer-contact button\s*\{[\s\S]*?background:\s*transparent;[\s\S]*?border:\s*0;/,
+    /\.app-shell \.site-footer-contact-row button\s*\{[\s\S]*?background:\s*transparent;[\s\S]*?border:\s*0;/,
   );
+  assert.match(css, /\.app-shell \.site-footer-contact:hover \.site-footer-contact-popover/);
+  assert.match(css, /\.app-shell \.site-footer-contact:focus-within \.site-footer-contact-popover/);
+  assert.match(css, /\.app-shell \.site-footer-contact\.is-open \.site-footer-contact-popover/);
   assert.match(css, /\.app-shell \.info-content/);
 });

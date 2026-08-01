@@ -19,6 +19,28 @@ type AdminStatus = {
   versions: Record<string, string | number>;
 };
 
+type NotificationPost = {
+  id: number;
+  publisher: string;
+  content: string;
+  publishedAt: string;
+};
+
+const notificationDateFormatter = new Intl.DateTimeFormat("ko-KR", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Seoul",
+});
+
+function notificationPublishedAt(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : notificationDateFormatter.format(date);
+}
+
 const versionLabels: Record<string, string> = {
   searchPipeline: "검색 파이프라인",
   fingerprintSchema: "검색 지문",
@@ -35,6 +57,34 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [settingSaving, setSettingSaving] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationPost[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  const [notificationPublisher, setNotificationPublisher] = useState("관리자");
+  const [notificationContent, setNotificationContent] = useState("");
+  const [editingNotificationId, setEditingNotificationId] = useState<number | null>(null);
+
+  const loadNotifications = useCallback(async () => {
+    setNotificationLoading(true);
+    try {
+      const response = await fetch("/api/admin/notifications", { cache: "no-store" });
+      if (response.status === 401) {
+        setAuthenticated(false);
+        setNotifications([]);
+        return;
+      }
+      const data = await response.json() as {
+        items?: NotificationPost[];
+        detail?: string;
+      };
+      if (!response.ok) throw new Error(data.detail ?? "알림 조회 오류");
+      setNotifications(data.items ?? []);
+    } catch {
+      setMessage("알림 게시물 목록을 불러오지 못했습니다.");
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, []);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -58,7 +108,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     void loadStatus();
-  }, [loadStatus]);
+    void loadNotifications();
+  }, [loadNotifications, loadStatus]);
 
   const login = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -77,7 +128,7 @@ export default function AdminPage() {
       }
       setPassword("");
       setAuthenticated(true);
-      await loadStatus();
+      await Promise.all([loadStatus(), loadNotifications()]);
     } catch {
       setMessage("관리자 로그인 요청을 처리하지 못했습니다.");
     } finally {
@@ -89,6 +140,7 @@ export default function AdminPage() {
     await fetch("/api/admin/logout", { method: "POST" });
     setAuthenticated(false);
     setStatus(null);
+    setNotifications([]);
     setMessage("");
   };
 
@@ -124,6 +176,71 @@ export default function AdminPage() {
       );
     } finally {
       setSettingSaving(false);
+    }
+  };
+
+  const resetNotificationForm = () => {
+    setEditingNotificationId(null);
+    setNotificationPublisher("관리자");
+    setNotificationContent("");
+  };
+
+  const saveNotification = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setNotificationSaving(true);
+    setMessage("");
+    try {
+      const editing = editingNotificationId !== null;
+      const response = await fetch(
+        editing
+          ? `/api/admin/notifications/${editingNotificationId}`
+          : "/api/admin/notifications",
+        {
+          method: editing ? "PUT" : "POST",
+          headers: { "content-type": "application/json; charset=utf-8" },
+          body: JSON.stringify({
+            publisher: notificationPublisher,
+            content: notificationContent,
+          }),
+        },
+      );
+      const data = await response.json() as { detail?: string };
+      if (!response.ok) throw new Error(data.detail ?? "알림 저장 오류");
+      resetNotificationForm();
+      await loadNotifications();
+      setMessage(editing ? "알림 게시물을 수정했습니다." : "알림 게시물을 등록했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "알림 게시물을 저장하지 못했습니다.");
+    } finally {
+      setNotificationSaving(false);
+    }
+  };
+
+  const editNotification = (notification: NotificationPost) => {
+    setEditingNotificationId(notification.id);
+    setNotificationPublisher(notification.publisher);
+    setNotificationContent(notification.content);
+  };
+
+  const deleteNotification = async (notification: NotificationPost) => {
+    if (!window.confirm("이 알림 게시물을 삭제하시겠습니까?")) return;
+    setNotificationSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/admin/notifications/${notification.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const data = await response.json() as { detail?: string };
+        throw new Error(data.detail ?? "알림 삭제 오류");
+      }
+      if (editingNotificationId === notification.id) resetNotificationForm();
+      await loadNotifications();
+      setMessage("알림 게시물을 삭제했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "알림 게시물을 삭제하지 못했습니다.");
+    } finally {
+      setNotificationSaving(false);
     }
   };
 
@@ -169,7 +286,11 @@ export default function AdminPage() {
           <strong>FindBid</strong>
         </a>
         <div>
-          <button type="button" onClick={() => void loadStatus()} disabled={loading}>
+          <button
+            type="button"
+            onClick={() => void Promise.all([loadStatus(), loadNotifications()])}
+            disabled={loading || notificationLoading}
+          >
             {loading ? "갱신 중..." : "새로고침"}
           </button>
           <button type="button" className="admin-logout" onClick={() => void logout()}>
@@ -227,6 +348,101 @@ export default function AdminPage() {
             >
               받지 않음
             </button>
+          </div>
+        </section>
+
+        <section className="admin-notification-control" aria-labelledby="notification-control-title">
+          <div className="admin-notification-head">
+            <div>
+              <span className="admin-control-kicker">SERVICE NOTIFICATIONS</span>
+              <h2 id="notification-control-title">알림 게시물 관리</h2>
+              <p>등록한 게시물은 사용자 알림 페이지에 최근 게시일시 순으로 표시됩니다.</p>
+            </div>
+            <span>{notifications.length.toLocaleString("ko-KR")}건</span>
+          </div>
+
+          <form className="admin-notification-form" onSubmit={saveNotification}>
+            <label>
+              <span>게시자</span>
+              <input
+                type="text"
+                value={notificationPublisher}
+                onChange={(event) => setNotificationPublisher(event.target.value)}
+                maxLength={100}
+                required
+              />
+            </label>
+            <label>
+              <span>내용</span>
+              <textarea
+                value={notificationContent}
+                onChange={(event) => setNotificationContent(event.target.value)}
+                maxLength={4000}
+                rows={4}
+                required
+                placeholder="사용자에게 안내할 내용을 입력하세요."
+              />
+              <small>{notificationContent.length.toLocaleString("ko-KR")} / 4,000자</small>
+            </label>
+            <div className="admin-notification-form-actions">
+              {editingNotificationId !== null && (
+                <button type="button" onClick={resetNotificationForm} disabled={notificationSaving}>
+                  수정 취소
+                </button>
+              )}
+              <button type="submit" disabled={notificationSaving}>
+                {notificationSaving
+                  ? "저장 중..."
+                  : editingNotificationId === null
+                    ? "알림 등록"
+                    : "수정 저장"}
+              </button>
+            </div>
+          </form>
+
+          <div className="admin-notification-table-wrap">
+            <table className="admin-notification-table">
+              <thead>
+                <tr>
+                  <th scope="col">게시일시</th>
+                  <th scope="col">게시자</th>
+                  <th scope="col">내용</th>
+                  <th scope="col">관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {notificationLoading && notifications.length === 0 ? (
+                  <tr><td colSpan={4}>알림 게시물을 불러오는 중입니다.</td></tr>
+                ) : notifications.length === 0 ? (
+                  <tr><td colSpan={4}>등록된 알림 게시물이 없습니다.</td></tr>
+                ) : notifications.map((notification) => (
+                  <tr key={notification.id}>
+                    <td>{notificationPublishedAt(notification.publishedAt)}</td>
+                    <td>{notification.publisher}</td>
+                    <td>{notification.content}</td>
+                    <td>
+                      <div className="admin-notification-actions">
+                        <button
+                          type="button"
+                          onClick={() => editNotification(notification)}
+                          disabled={notificationSaving}
+                        >
+                          수정
+                        </button>
+                        <button
+                          type="button"
+                          className="delete"
+                          onClick={() => void deleteNotification(notification)}
+                          disabled={notificationSaving}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 

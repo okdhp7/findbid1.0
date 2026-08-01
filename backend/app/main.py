@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, agent, bids, company, feedback, health, search
+from app.api.routes import admin, agent, bids, company, feedback, health, notifications, search
 from app.data import DEMO_BIDS
 from app.database import SessionLocal, initialize_database
 from app.repositories import BidRepository
@@ -45,3 +45,4 @@ app.include_router(bids.router, prefix=prefix)
 app.include_router(company.router, prefix=prefix)
 app.include_router(agent.router, prefix=prefix)
 app.include_router(admin.router, prefix=prefix)
+app.include_router(notifications.router, prefix=prefix)

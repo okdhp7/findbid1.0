@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.feedback import feedback_store
 from app.repositories import BidRepository
+from app.repositories.notification_repository import NotificationRepository
 from findbid_shared.config import get_settings
 from findbid_shared.schemas import BidRecord
 
@@ -13,6 +14,19 @@ router = APIRouter(tags=["내부 수집"])
 
 class FeedbackSettingsUpdate(BaseModel):
     feedback_enabled: bool
+
+
+class NotificationWrite(BaseModel):
+    publisher: str = Field(min_length=1, max_length=100)
+    content: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("publisher", "content")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("내용을 입력해 주세요.")
+        return cleaned
 
 
 def require_internal_key(value: str) -> None:
@@ -50,3 +64,50 @@ def update_feedback_settings(
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return {"feedbackEnabled": enabled}
+
+
+@router.get("/admin/notifications")
+def list_admin_notifications(
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    items = NotificationRepository(session).list(200)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/admin/notifications", status_code=201)
+def create_notification(
+    request: NotificationWrite,
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    return NotificationRepository(session).create(request.publisher, request.content)
+
+
+@router.put("/admin/notifications/{notification_id}")
+def update_notification(
+    notification_id: int,
+    request: NotificationWrite,
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    updated = NotificationRepository(session).update(
+        notification_id, request.publisher, request.content
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="알림 게시물을 찾을 수 없습니다.")
+    return updated
+
+
+@router.delete("/admin/notifications/{notification_id}", status_code=204)
+def delete_notification(
+    notification_id: int,
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> None:
+    require_internal_key(x_internal_key)
+    if not NotificationRepository(session).delete(notification_id):
+        raise HTTPException(status_code=404, detail="알림 게시물을 찾을 수 없습니다.")

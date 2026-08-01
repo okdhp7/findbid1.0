@@ -8,6 +8,7 @@ import {
   type CompanyProfile,
 } from "../lib/bids";
 import { SiteFooter } from "./_components/site-footer";
+import { useSharedTheme } from "./_components/use-shared-theme";
 
 const categories = ["전체", "용역", "물품", "공사"] as const;
 const regions = [
@@ -698,7 +699,7 @@ export default function Home() {
     }
   });
   const [saveNotice, setSaveNotice] = useState("");
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const { theme, toggleTheme } = useSharedTheme();
   const saved = useMemo(
     () => savedBids.map((bid) => bid.id),
     [savedBids],
@@ -1556,7 +1557,7 @@ export default function Home() {
             </svg>
             인사이트
           </a>
-          <a href="#alerts">
+          <a href="/notifications">
             <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
               <path d="M10 21h4" />
@@ -1573,7 +1574,7 @@ export default function Home() {
           <button
             className="icon-button theme-toggle"
             type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            onClick={toggleTheme}
             aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
           >
             {theme === "dark" ? (

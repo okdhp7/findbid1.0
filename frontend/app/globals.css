@@ -60,6 +60,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html[data-findbid-theme="dark"] {
+  background: #212121;
+  color-scheme: dark;
+}
+
+html[data-findbid-theme="dark"] body {
+  background: #212121;
+}
+
+html[data-findbid-theme="light"] {
+  color-scheme: light;
+}
+
 button, input, select, textarea {
   color: inherit;
   font: inherit;
@@ -116,7 +129,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ── Light Mode ── */
-.app-shell.light {
+html:not([data-findbid-theme="dark"]) .app-shell.light,
+html[data-findbid-theme="light"] .app-shell {
   --bg:           #ffffff;
   --bg-alt:       #f7f7f8;
   --panel:        rgba(255, 255, 255, 0.98);
@@ -2359,6 +2373,194 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
 }
 
+/* Insights page supporting text scale */
+.app-shell.insights-page .insights-hero p { font-size: 15px; }
+.app-shell.insights-page .insights-refresh { font-size: 15px; }
+.app-shell.insights-page .insight-dashboard-head p { font-size: 15px; }
+.app-shell.insights-page .insight-sample,
+.app-shell.insights-page .insight-panel-head p,
+.app-shell.insights-page .insight-callout > span,
+.app-shell.insights-page .insight-callout > p,
+.app-shell.insights-page .demand-list li > span,
+.app-shell.insights-page .restriction-list li > span,
+.app-shell.insights-page .insight-empty { font-size: 14px; }
+.app-shell.insights-page .opportunity-summary span,
+.app-shell.insights-page .market-summary span,
+.app-shell.insights-page .restriction-summary span,
+.app-shell.insights-page .opportunity-summary em,
+.app-shell.insights-page .restriction-summary em,
+.app-shell.insights-page .priority-opportunities-head > div > span,
+.app-shell.insights-page .priority-opportunities-head > a,
+.app-shell.insights-page .priority-opportunity-list li > div strong,
+.app-shell.insights-page .priority-opportunity-list li > div span,
+.app-shell.insights-page .priority-opportunities-empty,
+.app-shell.insights-page .capability-score > div:first-child span,
+.app-shell.insights-page .demand-list small,
+.app-shell.insights-page .market-bars span,
+.app-shell.insights-page .market-bars strong,
+.app-shell.insights-page .market-footnote,
+.app-shell.insights-page .restriction-list li > strong,
+.app-shell.insights-page .restriction-footnote { font-size: 13px; }
+.app-shell.insights-page .priority-opportunity-list li > a,
+.app-shell.insights-page .capability-score strong em,
+.app-shell.insights-page .market-summary strong { font-size: 15px; }
+.app-shell.insights-page .insight-callout > strong { font-size: 17px; }
+.app-shell.insights-page .opportunity-summary strong { font-size: 21px; }
+.app-shell.insights-page .capability-score strong { font-size: 24px; }
+.app-shell.insights-page .restriction-summary strong { font-size: 20px; }
+.app-shell.insights-page .demand-list em { font-size: 12px; }
+
+/* Notification page */
+.app-shell.notifications-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-shell .notifications-hero {
+  align-items: center;
+  background: linear-gradient(120deg, var(--panel-soft), transparent 66%), var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 48px max(24px, calc((100vw - 1280px) / 2)) 36px;
+}
+
+.app-shell .notifications-hero h1 {
+  color: var(--text);
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 700;
+  letter-spacing: -1.4px;
+  line-height: 1.2;
+  margin: 6px 0;
+}
+
+.app-shell .notifications-hero p,
+.app-shell .notifications-list-head p {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.app-shell .notifications-hero > button {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.app-shell .notifications-hero > button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.app-shell .notifications-main {
+  flex: 1 0 auto;
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 28px 24px 56px;
+  width: 100%;
+}
+
+.app-shell .notifications-list-head {
+  align-items: flex-end;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.app-shell .notifications-list-head h2 {
+  color: var(--text);
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 3px;
+}
+
+.app-shell .notifications-list-head > strong {
+  color: var(--text);
+  font-size: 19px;
+}
+
+.app-shell .notifications-list-head > strong em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  margin-left: 2px;
+}
+
+.app-shell .notifications-error {
+  background: var(--red-soft);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--red);
+  font-size: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.app-shell .notifications-table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: auto;
+}
+
+.app-shell .notifications-table {
+  border-collapse: collapse;
+  min-width: 720px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.app-shell .notifications-table th,
+.app-shell .notifications-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 15px 18px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.app-shell .notifications-table th {
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-shell .notifications-table th:nth-child(1) { width: 190px; }
+.app-shell .notifications-table th:nth-child(2) { width: 150px; }
+
+.app-shell .notifications-table td {
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.app-shell .notifications-table td:first-child {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-shell .notifications-table td:last-child {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-shell .notifications-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app-shell .notifications-empty {
+  color: var(--muted) !important;
+  padding: 48px 20px !important;
+  text-align: center !important;
+}
+
 /* Public information pages and footer */
 .app-shell .site-footer {
   background: var(--bg-alt);
@@ -2429,12 +2631,64 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: 2px;
+  position: relative;
 }
 
-.app-shell .site-footer-contact > strong {
+.app-shell .site-footer-contact-trigger {
+  background: transparent;
+  border: 0;
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 600;
+  padding: 0;
+}
+
+.app-shell .site-footer-contact-trigger:hover,
+.app-shell .site-footer-contact-trigger:focus-visible {
+  color: var(--accent-light);
+}
+
+.app-shell .site-footer-contact-popover {
+  background: var(--panel-solid);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  bottom: calc(100% + 6px);
+  box-shadow: var(--shadow-panel);
+  opacity: 0;
+  padding: 14px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+  visibility: hidden;
+  width: min(330px, calc(100vw - 36px));
+  z-index: 20;
+}
+
+.app-shell .site-footer-contact-popover::before {
+  bottom: -7px;
+  content: "";
+  height: 7px;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.app-shell .site-footer-contact:hover .site-footer-contact-popover,
+.app-shell .site-footer-contact:focus-within .site-footer-contact-popover,
+.app-shell .site-footer-contact.is-open .site-footer-contact-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.app-shell .site-footer-contact-popover p {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0 0 9px;
 }
 
 .app-shell .site-footer-contact-row {
@@ -2450,7 +2704,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 
-.app-shell .site-footer-contact button {
+.app-shell .site-footer-contact-row button {
   background: transparent;
   border: 0;
   border-radius: 6px;
@@ -2464,7 +2718,7 @@ a { color: inherit; text-decoration: none; }
   transition: var(--transition);
 }
 
-.app-shell .site-footer-contact button:hover {
+.app-shell .site-footer-contact-row button:hover {
   background: transparent;
   color: var(--accent-light);
 }
@@ -4867,13 +5121,13 @@ a { color: inherit; text-decoration: none; }
 }
 
 .admin-brand > strong {
-  font-size: 19px;
+  font-size: 20px;
 }
 
 .admin-kicker {
   color: #2f73ec;
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.6px;
   margin-top: 34px;
@@ -4881,7 +5135,8 @@ a { color: inherit; text-decoration: none; }
 
 .admin-login-card h1,
 .admin-dashboard-head h1 {
-  font-size: 30px;
+  font-size: 32px;
+  font-weight: 700;
   letter-spacing: -1px;
   margin: 8px 0;
 }
@@ -4889,7 +5144,7 @@ a { color: inherit; text-decoration: none; }
 .admin-login-card > p,
 .admin-dashboard-head p {
   color: #65738e;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.65;
   margin: 0;
 }
@@ -4902,7 +5157,7 @@ a { color: inherit; text-decoration: none; }
 
 .admin-login-card label {
   color: #3e4d69;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -4910,7 +5165,7 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid #cfd9e8;
   border-radius: 10px;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   min-height: 48px;
   padding: 0 14px;
 }
@@ -5024,6 +5279,248 @@ a { color: inherit; text-decoration: none; }
 .admin-feedback-toggle button:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+
+.admin-notification-control {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #dce5f3;
+  border-radius: 16px;
+  box-shadow: 0 12px 34px rgba(25, 57, 104, 0.08);
+  margin-top: 24px;
+  padding: 24px;
+}
+
+.admin-notification-head {
+  align-items: flex-end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.admin-notification-head h2 {
+  font-size: 18px;
+  margin: 5px 0;
+}
+
+.admin-notification-head p {
+  color: #748198;
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.admin-notification-head > span {
+  color: #748198;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-notification-form {
+  border-top: 1px solid #e7edf6;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.admin-notification-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.admin-notification-form label:first-child {
+  grid-column: 1 / -1;
+  max-width: 380px;
+}
+
+.admin-notification-form label:nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.admin-notification-form label > span {
+  color: #51617c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-notification-form input,
+.admin-notification-form textarea {
+  background: #ffffff;
+  border: 1px solid #cdd8e8;
+  border-radius: 10px;
+  color: #263958;
+  font: inherit;
+  font-size: 13px;
+  padding: 11px 12px;
+}
+
+.admin-notification-form textarea {
+  line-height: 1.55;
+  min-height: 96px;
+  resize: vertical;
+}
+
+.admin-notification-form small {
+  align-self: flex-end;
+  color: #8b97aa;
+  font-size: 11px;
+  text-align: right;
+}
+
+.admin-notification-form-actions {
+  align-self: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: flex-end;
+}
+
+.admin-notification-form-actions button,
+.admin-notification-actions button {
+  background: #eef3fa;
+  border: 0;
+  border-radius: 9px;
+  color: #526078;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 36px;
+  min-width: 72px;
+  padding: 0 13px;
+}
+
+.admin-notification-form-actions button[type="submit"] {
+  background: #176be8;
+  color: #ffffff;
+}
+
+.admin-notification-form-actions button {
+  font-size: 13px;
+  height: 96px;
+  min-height: 96px;
+  min-width: 112px;
+  padding: 0 20px;
+}
+
+/* Admin typography scale */
+.admin-shell .admin-brand > strong { font-size: 21px; }
+.admin-shell .admin-kicker,
+.admin-shell .admin-control-kicker { font-size: 12px; }
+.admin-shell .admin-login-card h1,
+.admin-shell .admin-dashboard-head h1 {
+  font-size: 33px;
+  font-weight: 700;
+}
+.admin-shell .admin-login-card > p,
+.admin-shell .admin-dashboard-head p { font-size: 16px; }
+.admin-shell .admin-login-card label { font-size: 14px; }
+.admin-shell .admin-login-card input { font-size: 17px; }
+.admin-shell .admin-login-card form > button,
+.admin-shell .admin-topbar button { font-size: 15px; }
+.admin-shell .admin-login-card > small { font-size: 13px; }
+.admin-shell .admin-message { font-size: 14px; }
+.admin-shell .admin-feedback-control h2,
+.admin-shell .admin-notification-head h2,
+.admin-shell .admin-panel-head h2 {
+  font-weight: 700;
+}
+.admin-shell .admin-feedback-control h2,
+.admin-shell .admin-notification-head h2 { font-size: 21px; }
+.admin-shell .admin-panel-head h2 { font-size: 20px; }
+.admin-shell .admin-feedback-control p,
+.admin-shell .admin-notification-head p { font-size: 15px; }
+.admin-shell .admin-feedback-toggle button,
+.admin-shell .admin-notification-head > span,
+.admin-shell .admin-notification-form label > span,
+.admin-shell .admin-health,
+.admin-shell .admin-metrics article > span,
+.admin-shell .admin-metrics article > strong em,
+.admin-shell .admin-version-list dt,
+.admin-shell .admin-version-list dd,
+.admin-shell .admin-reason-list span,
+.admin-shell .admin-reason-list strong,
+.admin-shell .admin-empty { font-size: 14px; }
+.admin-shell .admin-notification-form input,
+.admin-shell .admin-notification-form textarea,
+.admin-shell .admin-notification-form-actions button { font-size: 15px; }
+.admin-shell .admin-notification-form small,
+.admin-shell .admin-notification-table th,
+.admin-shell .admin-panel-head > span,
+.admin-shell .admin-footnote { font-size: 13px; }
+.admin-shell .admin-notification-table td,
+.admin-shell .admin-notification-actions button { font-size: 14px; }
+.admin-shell .admin-metrics article > strong { font-size: 31px; }
+
+.admin-notification-form-actions button:disabled,
+.admin-notification-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.admin-notification-table-wrap {
+  border: 1px solid #dce5f3;
+  border-radius: 12px;
+  margin-top: 22px;
+  overflow: auto;
+}
+
+.admin-notification-table {
+  border-collapse: collapse;
+  min-width: 780px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.admin-notification-table th,
+.admin-notification-table td {
+  border-bottom: 1px solid #e7edf6;
+  padding: 13px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-notification-table th {
+  background: #f6f8fc;
+  color: #65738e;
+  font-size: 11px;
+}
+
+.admin-notification-table th:nth-child(1) { width: 170px; }
+.admin-notification-table th:nth-child(2) { width: 120px; }
+.admin-notification-table th:nth-child(4) { width: 180px; }
+
+.admin-notification-table td {
+  color: #51617c;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.admin-notification-table td:nth-child(3) {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-notification-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-notification-table td[colspan] {
+  color: #8b97aa;
+  padding: 30px 16px;
+  text-align: center;
+}
+
+.admin-notification-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.admin-notification-actions button:last-child {
+  background: #fff0f2;
+  color: #c23d55;
 }
 
 .admin-dashboard-shell {
@@ -5200,7 +5697,8 @@ a { color: inherit; text-decoration: none; }
 
 .admin-shell button:focus-visible,
 .admin-shell a:focus-visible,
-.admin-shell input:focus-visible {
+.admin-shell input:focus-visible,
+.admin-shell textarea:focus-visible {
   outline: 3px solid rgba(47, 115, 236, 0.32);
   outline-offset: 2px;
 }
@@ -5301,6 +5799,26 @@ a { color: inherit; text-decoration: none; }
 
   .admin-feedback-toggle {
     align-self: flex-start;
+  }
+
+  .admin-notification-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .admin-notification-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-notification-form label:first-child {
+    max-width: none;
+  }
+
+  .admin-notification-form label:nth-child(2),
+  .admin-notification-form-actions {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .app-shell {
