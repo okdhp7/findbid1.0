@@ -1705,7 +1705,7 @@ export default function Home() {
                 }}
                 enterKeyHint="search"
                 aria-label="찾고 싶은 입찰사업을 자연어로 입력"
-                placeholder="서울 경기에  인공지능 시스템 구축 용역 사업으로 10억원 이하인 수의계약 또는 제한경쟁 사업을 찾아줘"
+                placeholder="서울 경기에 인공지능 시스템 구축 용역 사업으로 5억원이상 10억원 이하의 수의계약 또는 제한경쟁 사업을 찾아줘"
               />
               <button
                 type="button"

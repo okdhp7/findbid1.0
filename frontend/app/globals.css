@@ -1855,6 +1855,122 @@ a { color: inherit; text-decoration: none; }
   text-align: right;
 }
 
+.app-shell .priority-opportunities {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 13px;
+}
+
+.app-shell .priority-opportunities-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.app-shell .priority-opportunities-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-shell .priority-opportunities-head strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.app-shell .priority-opportunities-head > div > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.app-shell .priority-opportunities-head > a {
+  color: var(--accent-light);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-shell .priority-opportunity-list {
+  counter-reset: priority-opportunity;
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-shell .priority-opportunity-list li {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  counter-increment: priority-opportunity;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  padding: 9px 0;
+}
+
+.app-shell .priority-opportunity-list li:first-child {
+  border-top: 0;
+}
+
+.app-shell .priority-opportunity-rank {
+  align-items: center;
+  background: var(--green-soft);
+  border-radius: 7px;
+  color: var(--green);
+  display: flex;
+  font-size: 10px;
+  font-weight: 800;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.app-shell .priority-opportunity-rank::before {
+  content: counter(priority-opportunity);
+}
+
+.app-shell .priority-opportunity-list li > a {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .priority-opportunity-list li > a:hover {
+  color: var(--accent-light);
+}
+
+.app-shell .priority-opportunity-list li > div {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.app-shell .priority-opportunity-list li > div strong {
+  color: var(--green);
+  font-size: 11px;
+}
+
+.app-shell .priority-opportunity-list li > div span,
+.app-shell .priority-opportunities-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.app-shell .priority-opportunities-empty {
+  background: var(--panel-soft);
+  border-radius: 9px;
+  margin: 9px 0 0;
+  padding: 14px;
+  text-align: center;
+}
+
 .app-shell .capability-score {
   align-items: center;
   display: grid;
@@ -2155,6 +2271,25 @@ a { color: inherit; text-decoration: none; }
 
 .app-shell.insights-page .insight-callout > p {
   font-size: 13px;
+}
+
+.app-shell.insights-page .priority-opportunities-head strong {
+  font-size: 15px;
+}
+
+.app-shell.insights-page .priority-opportunities-head > div > span,
+.app-shell.insights-page .priority-opportunities-head > a,
+.app-shell.insights-page .priority-opportunity-list li > div strong {
+  font-size: 12px;
+}
+
+.app-shell.insights-page .priority-opportunity-list li > a {
+  font-size: 14px;
+}
+
+.app-shell.insights-page .priority-opportunity-list li > div span,
+.app-shell.insights-page .priority-opportunities-empty {
+  font-size: 12px;
 }
 
 .app-shell.insights-page .capability-score strong {

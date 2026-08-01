@@ -268,7 +268,7 @@ class ExternalBidRepository:
             matched_conditions.append(
                 "사업금액: "
                 f"{ExternalBidRepository._budget_label(min_budget)} "
-                f"{min_operator} ~ "
+                f"{min_operator} "
                 f"{ExternalBidRepository._budget_label(max_budget)} "
                 f"{max_operator}"
             )

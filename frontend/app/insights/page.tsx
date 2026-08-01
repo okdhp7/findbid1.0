@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   companyProfile as DEFAULT_COMPANY_PROFILE,
   type Bid,
@@ -230,6 +231,16 @@ export default function InsightsPage() {
       )
       .sort((left, right) => right.score - left.score)
       .slice(0, 5);
+    const priorityOpportunities = [...searchData.items]
+      .filter((bid) => bid.eligibility === "참가 가능" && bid.daysLeft >= 0)
+      .sort((left, right) => {
+        const leftIsClosingSoon = left.daysLeft <= 14 ? 0 : 1;
+        const rightIsClosingSoon = right.daysLeft <= 14 ? 0 : 1;
+        return leftIsClosingSoon - rightIsClosingSoon
+          || left.daysLeft - right.daysLeft
+          || right.score - left.score;
+      })
+      .slice(0, 3);
 
     return {
       sampleSize: searchData.items.length,
@@ -242,6 +253,7 @@ export default function InsightsPage() {
       contractBreakdown,
       averageBudget,
       missedCandidates,
+      priorityOpportunities,
     };
   }, [companyProfile, searchData]);
 
@@ -371,6 +383,39 @@ export default function InsightsPage() {
                     ? `마감이 가까운 ${searchData.closingSoonTotal.toLocaleString("ko-KR")}건부터 검토해 보세요.`
                     : "현재 7일 이내 마감 공고는 없습니다."}
                 </p>
+              </div>
+              <div className="priority-opportunities">
+                <div className="priority-opportunities-head">
+                  <div>
+                    <strong>지금 검토할 공고</strong>
+                    <span>참가 가능 · 14일 내 마감 우선</span>
+                  </div>
+                  <Link href="/#search">전체 보기 <span aria-hidden="true">→</span></Link>
+                </div>
+                {insightData.priorityOpportunities.length > 0 ? (
+                  <ol className="priority-opportunity-list">
+                    {insightData.priorityOpportunities.map((bid) => (
+                      <li key={bid.id}>
+                        <span className="priority-opportunity-rank" aria-hidden="true" />
+                        <a
+                          href={bid.sourceUrl || "/#search"}
+                          target={bid.sourceUrl ? "_blank" : undefined}
+                          rel={bid.sourceUrl ? "noopener noreferrer" : undefined}
+                        >
+                          {bid.title}
+                        </a>
+                        <div>
+                          <strong>{bid.daysLeft === 0 ? "오늘 마감" : `D-${bid.daysLeft}`}</strong>
+                          <span>적합도 {bid.score.toLocaleString("ko-KR")}점</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="priority-opportunities-empty">
+                    현재 우선 검토할 참가 가능 공고가 없습니다.
+                  </p>
+                )}
               </div>
             </article>
 

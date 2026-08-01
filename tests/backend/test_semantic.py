@@ -408,8 +408,27 @@ def test_budget_comparison_operators_are_preserved() -> None:
     assert "사업금액: 1억원 미만" in under.conditions
     assert range_query.min_budget == 100_000_000
     assert range_query.max_budget == 500_000_000
-    assert "사업금액: 1억원 이상" in range_query.conditions
-    assert "사업금액: 5억원 이하" in range_query.conditions
+    assert "사업금액: 1억원 이상 5억원 이하" in range_query.conditions
+    assert "사업금액: 1억원 이상" not in range_query.conditions
+    assert "사업금액: 5억원 이하" not in range_query.conditions
+
+
+def test_attached_budget_operator_is_not_used_as_a_required_keyword() -> None:
+    query = (
+        "서울 경기에 인공지능 시스템 구축 용역 사업으로 사업금액 "
+        "5억원이상 10억원 이하의 수의계약 또는 제한경쟁 사업을 찾아줘"
+    )
+    analysis = analyze_query(query)
+    conditions = build_search_conditions(analysis)
+    repository = object.__new__(ExternalBidRepository)
+    _, params, _ = repository._search_parts(SearchRequest(semantic_query=query))
+
+    assert analysis.min_budget == 500_000_000
+    assert analysis.max_budget == 1_000_000_000
+    assert analysis.free_text_terms == ("시스템",)
+    assert "사업금액: 5억원 이상 10억원 이하" in analysis.conditions
+    assert all(condition.value != "5억원이상" for condition in conditions)
+    assert all(value != "%5억원이상%" for value in params.values())
 
 
 def test_natural_language_minimum_budget_is_used_in_sql() -> None:
@@ -587,7 +606,7 @@ def test_semantic_budget_range_is_shown_as_a_search_condition() -> None:
         ),
     )
     assert matched_conditions == [
-        "사업금액: 1억원 이상 ~ 3억원 이하",
+        "사업금액: 1억원 이상 3억원 이하",
     ]
 
 

@@ -258,7 +258,8 @@ def _budget_label(amount: int) -> str:
 def _is_amount_token(token: str) -> bool:
     return bool(
         re.fullmatch(
-            r"\d+(?:\.\d+)?(?:억|만)?원?",
+            r"\d+(?:\.\d+)?(?:억|만)?원?"
+            r"(?:(?:이상|이하|초과|미만|부터|까지)[가-힣]*)?",
             token,
         )
     )
@@ -461,10 +462,18 @@ def analyze_query(text: str) -> KnowledgeAnalysis:
             "계약방법: "
             + " · ".join(dict.fromkeys(contract_methods))
         )
-    if min_budget:
+    if min_budget is not None and max_budget is not None:
+        min_operator = "이상" if min_budget_inclusive else "초과"
+        max_operator = "이하" if max_budget_inclusive else "미만"
+        conditions.append(
+            "사업금액: "
+            f"{_budget_label(min_budget)} {min_operator} "
+            f"{_budget_label(max_budget)} {max_operator}"
+        )
+    elif min_budget is not None:
         operator = "이상" if min_budget_inclusive else "초과"
         conditions.append(f"사업금액: {_budget_label(min_budget)} {operator}")
-    if max_budget:
+    elif max_budget is not None:
         operator = "이하" if max_budget_inclusive else "미만"
         conditions.append(f"사업금액: {_budget_label(max_budget)} {operator}")
     if closing_days:
