@@ -2438,6 +2438,7 @@ html[data-findbid-theme="light"] .app-shell {
 .app-shell .notifications-hero p,
 .app-shell .notifications-list-head p {
   color: var(--muted);
+  cursor: pointer;
   font-size: 14px;
   margin: 0;
 }
@@ -2559,6 +2560,121 @@ html[data-findbid-theme="light"] .app-shell {
   color: var(--muted) !important;
   padding: 48px 20px !important;
   text-align: center !important;
+}
+
+.app-shell .notification-popup-backdrop {
+  align-items: center;
+  backdrop-filter: blur(6px);
+  background: rgba(9, 17, 31, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 200;
+}
+
+.app-shell .notification-popup {
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  max-height: min(820px, calc(100dvh - 48px));
+  max-width: 980px;
+  min-height: 420px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.app-shell .notification-popup-head {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 22px 24px;
+}
+
+.app-shell .notification-popup-head h2 {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 700;
+  margin: 5px 0 4px;
+}
+
+.app-shell .notification-popup-head p,
+.app-shell .notification-popup-summary p {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.app-shell .notification-popup-head-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.app-shell .notification-popup-head-actions button {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 42px;
+  padding: 0 15px;
+}
+
+.app-shell .notification-popup-head-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.app-shell .notification-popup-head-actions .notification-popup-close {
+  align-items: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 25px;
+  font-weight: 400;
+  justify-content: center;
+  min-width: 42px;
+  padding: 0;
+}
+
+.app-shell .notification-popup-summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 24px 12px;
+}
+
+.app-shell .notification-popup-summary strong {
+  color: var(--text);
+  font-size: 19px;
+}
+
+.app-shell .notification-popup-summary em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  margin-left: 2px;
+}
+
+.app-shell .notification-popup .notifications-error {
+  margin: 0 24px 12px;
+}
+
+.app-shell .notification-popup-table-wrap {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  flex: 1;
+  margin: 0 24px 24px;
+  min-height: 0;
 }
 
 /* Public information pages and footer */
@@ -5775,7 +5891,52 @@ html[data-findbid-theme="light"] .app-shell {
   }
 
   .app-shell .insights-mobile-dock {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .app-shell .mobile-dock.has-notifications {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .app-shell .notification-popup-backdrop {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .app-shell .notification-popup {
+    border-radius: var(--radius-lg);
+    max-height: calc(100dvh - 24px);
+    min-height: min(620px, calc(100dvh - 24px));
+  }
+
+  .app-shell .notification-popup-head {
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .app-shell .notification-popup-head h2 {
+    font-size: 24px;
+  }
+
+  .app-shell .notification-popup-head p {
+    font-size: 13px;
+  }
+
+  .app-shell .notification-popup-head-actions > button:first-child {
+    display: none;
+  }
+
+  .app-shell .notification-popup-summary {
+    padding: 14px 18px 10px;
+  }
+
+  .app-shell .notification-popup .notifications-error {
+    margin: 0 18px 10px;
+  }
+
+  .app-shell .notification-popup-table-wrap {
+    margin: 0 18px 18px;
   }
 
   .admin-metrics {

@@ -8,6 +8,7 @@ import {
   type CompanyProfile,
 } from "../../lib/bids";
 import { SiteFooter } from "../_components/site-footer";
+import { NotificationPopup } from "../_components/notification-popup";
 import { useSharedTheme } from "../_components/use-shared-theme";
 
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
@@ -126,7 +127,9 @@ export default function InsightsPage() {
   const [targetCount, setTargetCount] = useState(INSIGHT_TARGET_SIZE);
   const [priorityOpportunities, setPriorityOpportunities] = useState<Bid[]>([]);
   const [restrictionBids, setRestrictionBids] = useState<Bid[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const insightRequestIdRef = useRef(0);
+  const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
 
   const loadInsights = useCallback(async (profile: CompanyProfile) => {
     const requestId = insightRequestIdRef.current + 1;
@@ -391,13 +394,13 @@ export default function InsightsPage() {
             </svg>
             인사이트
           </a>
-          <a href="/notifications">
+          <button type="button" onClick={() => setNotificationsOpen(true)} aria-haspopup="dialog">
             <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
               <path d="M10 21h4" />
             </svg>
             알림
-          </a>
+          </button>
         </nav>
 
         <div className="top-actions">
@@ -676,7 +679,13 @@ export default function InsightsPage() {
           <span aria-hidden="true">↗</span>
           <small>인사이트</small>
         </a>
+        <button type="button" onClick={() => setNotificationsOpen(true)} aria-haspopup="dialog">
+          <span aria-hidden="true">♢</span>
+          <small>알림</small>
+        </button>
       </nav>
+
+      <NotificationPopup open={notificationsOpen} onClose={closeNotifications} />
     </main>
   );
 }

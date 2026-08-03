@@ -762,11 +762,12 @@ test("인사이트 메뉴는 별도 페이지에서 네 가지 우선 분석을 
   assert.match(css, /\.app-shell\.insights-page \.market-bars > div > strong\s*\{[\s\S]*?text-align:\s*right/);
 });
 
-test("알림 메뉴는 관리자 게시물과 연결된 별도 목록 페이지를 제공한다", async () => {
-  const [home, insights, notifications, admin, publicRoute, adminRoute, itemRoute, css] = await Promise.all([
+test("알림 메뉴는 관리자 게시물과 연결된 접근 가능한 팝업을 제공한다", async () => {
+  const [home, insights, notifications, popup, admin, publicRoute, adminRoute, itemRoute, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/insights/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/notifications/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_components/notification-popup.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/notifications/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/notifications/route.ts", import.meta.url), "utf8"),
@@ -774,8 +775,16 @@ test("알림 메뉴는 관리자 게시물과 연결된 별도 목록 페이지�
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(home, /href="\/notifications"/);
-  assert.match(insights, /href="\/notifications"/);
+  assert.match(home, /<NotificationPopup open=\{notificationsOpen\} onClose=\{closeNotifications\} \/>/);
+  assert.match(insights, /<NotificationPopup open=\{notificationsOpen\} onClose=\{closeNotifications\} \/>/);
+  assert.match(home, /setNotificationsOpen\(true\)/);
+  assert.match(insights, /setNotificationsOpen\(true\)/);
+  assert.match(popup, /role="dialog"/);
+  assert.match(popup, /aria-modal="true"/);
+  assert.match(popup, /event\.key === "Escape"/);
+  assert.match(popup, /event\.target === event\.currentTarget/);
+  assert.match(popup, /fetch\("\/api\/notifications"/);
+  assert.match(popup, /<th scope="col">게시일시<\/th><th scope="col">게시자<\/th><th scope="col">내용<\/th>/);
   assert.match(notifications, /className="active" href="\/notifications" aria-current="page"/);
   assert.match(notifications, /fetch\("\/api\/notifications"/);
   assert.match(notifications, /<th scope="col">게시일시<\/th><th scope="col">게시자<\/th><th scope="col">내용<\/th>/);
@@ -793,6 +802,8 @@ test("알림 메뉴는 관리자 게시물과 연결된 별도 목록 페이지�
   assert.match(itemRoute, /method: "PUT" \| "DELETE"/);
   assert.match(itemRoute, /x-internal-key/);
   assert.match(css, /\.app-shell \.notifications-table/);
+  assert.match(css, /\.app-shell \.notification-popup-backdrop/);
+  assert.match(css, /\.app-shell \.notification-popup\s*\{/);
   assert.match(css, /\.admin-notification-control/);
 });
 

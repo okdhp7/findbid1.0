@@ -8,6 +8,7 @@ import {
   type CompanyProfile,
 } from "../lib/bids";
 import { SiteFooter } from "./_components/site-footer";
+import { NotificationPopup } from "./_components/notification-popup";
 import { useSharedTheme } from "./_components/use-shared-theme";
 
 const categories = ["전체", "용역", "물품", "공사"] as const;
@@ -656,6 +657,7 @@ export default function Home() {
   const [noticeDetailError, setNoticeDetailError] = useState("");
   const [savedBids, setSavedBids] = useState<Bid[]>([]);
   const [savedBidsOpen, setSavedBidsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [clearingSavedBids, setClearingSavedBids] = useState(false);
   const [feedbackBidId, setFeedbackBidId] = useState("");
   const [selectedFeedbackReasons, setSelectedFeedbackReasons] = useState<string[]>([]);
@@ -672,6 +674,7 @@ export default function Home() {
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [saveSearchOpen, setSaveSearchOpen] = useState(false);
+  const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
   const [savedSearchName, setSavedSearchName] = useState("");
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(() => {
     if (typeof window === "undefined") return [];
@@ -1557,13 +1560,13 @@ export default function Home() {
             </svg>
             인사이트
           </a>
-          <a href="/notifications">
+          <button type="button" onClick={() => setNotificationsOpen(true)} aria-haspopup="dialog">
             <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
               <path d="M10 21h4" />
             </svg>
             알림
-          </a>
+          </button>
         </nav>
 
         <div className="top-actions">
@@ -2344,10 +2347,10 @@ export default function Home() {
             </div>
           )}
 
-          <div className="source-note">
+          {/* <div className="source-note">
             <span>ⓘ</span>
-            {searchError || "G2B 입찰공고 데이터베이스의 실시간 검색결과입니다."}
-          </div>
+            {searchError || "G2B 입찰공고 데이터베이스의 검색결과입니다."}
+          </div> */}
         </div>
       </section>
 
@@ -3243,7 +3246,7 @@ export default function Home() {
       <SiteFooter />
 
       {/* ── Mobile Dock ── */}
-      <nav className="mobile-dock" aria-label="모바일 주요 메뉴">
+      <nav className="mobile-dock has-notifications" aria-label="모바일 주요 메뉴">
         <a className="active" href="#search">
           <span aria-hidden="true">⌕</span>
           <small>탐색</small>
@@ -3270,7 +3273,13 @@ export default function Home() {
           <span aria-hidden="true">○</span>
           <small>프로필</small>
         </button>
+        <button type="button" onClick={() => setNotificationsOpen(true)} aria-haspopup="dialog">
+          <span aria-hidden="true">♢</span>
+          <small>알림</small>
+        </button>
       </nav>
+
+      <NotificationPopup open={notificationsOpen} onClose={closeNotifications} />
     </main>
   );
 }
