@@ -167,6 +167,13 @@ class SearchService:
                             record.id,
                         )
                     )
+                elif request.sort_mode == "latest":
+                    records.sort(
+                        key=lambda record: str(
+                            record.raw_data.get("announceDate") or ""
+                        ),
+                        reverse=True,
+                    )
                 total = len(records)
                 average_score = (
                     round(sum(item.score for item in records) / len(records))

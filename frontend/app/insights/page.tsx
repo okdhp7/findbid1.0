@@ -15,6 +15,125 @@ const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const INSIGHT_PAGE_SIZE = 200;
 const INSIGHT_TARGET_SIZE = 1_000;
 const INSIGHT_IGNORED_TERMS = new Set(["공고", "사업", "용역", "물품", "공사", "기타"]);
+const HOT_KEYWORD_IGNORED_TERMS = new Set([
+  "공고",
+  "입찰",
+  "입찰공고",
+  "사업",
+  "용역",
+  "물품",
+  "공사",
+  "계약",
+  "업체",
+  "제출",
+  "안내",
+  "관련",
+  "과업",
+  "전자입찰",
+  "견적",
+  "견적제출",
+  "소액수의",
+  "제안서",
+  "나라장터",
+  "조달청",
+  "선정",
+  "연간",
+  "단가",
+  "학년도",
+  "학기",
+  "연도",
+  "년도",
+  "금년도",
+  "차년도",
+  "상반기",
+  "하반기",
+  "분기",
+  "회차",
+  "차수",
+  "구매",
+  "구입",
+  "도입",
+  "운영",
+  "단계",
+  "추진",
+  "시행",
+  "진행",
+  "계획",
+  "지원",
+  "관리",
+  "제작",
+  "설치",
+  "구축",
+  "개선",
+  "보수",
+  "정비",
+  "교체",
+  "업무",
+  "수행",
+  "실시",
+  "제공",
+  "발주",
+  "모집",
+  "요청",
+  "공급",
+  "납품",
+  "대행",
+  "위탁",
+  "긴급",
+  "재공고",
+  "변경",
+  "취소",
+  "신규",
+  "대상",
+  "일체",
+  "위한",
+  "대한",
+  "따른",
+  "통한",
+  "관한",
+  "해당",
+  "포함",
+  "예정",
+  "전국",
+  "지역",
+  "자격",
+  "면허",
+  "인증",
+  "사업자",
+  "예산",
+  "금액",
+  "시스템",
+  "운영관리",
+  "관리운영",
+  "운영지원",
+  "구매설치",
+  "구매납품",
+  "도입운영",
+  "구축운영",
+]);
+const HOT_KEYWORD_ALIASES = new Map([
+  ["ai", "인공지능"],
+  ["a.i", "인공지능"],
+  ["인공지능", "인공지능"],
+  ["홈페이지", "홈페이지"],
+  ["웹사이트", "홈페이지"],
+  ["유지보수", "유지관리"],
+  ["유지관리", "유지관리"],
+]);
+const HOT_KEYWORD_DIMENSIONS = [
+  { value: "all", label: "전체" },
+  { value: "category", label: "업무구분별" },
+  { value: "region", label: "지역별" },
+  { value: "budget", label: "금액대별" },
+] as const;
+const HOT_KEYWORD_BUDGET_BANDS = [
+  { value: "under-1", label: "1억원 미만", min: 1, max: 100_000_000 },
+  { value: "1-5", label: "1억원 이상~5억원 미만", min: 100_000_000, max: 500_000_000 },
+  { value: "5-10", label: "5억원 이상~10억원 미만", min: 500_000_000, max: 1_000_000_000 },
+  { value: "10-50", label: "10억원 이상~50억원 미만", min: 1_000_000_000, max: 5_000_000_000 },
+  { value: "over-50", label: "50억원 이상", min: 5_000_000_000, max: Number.POSITIVE_INFINITY },
+  { value: "unknown", label: "금액 미정", min: 0, max: 1 },
+] as const;
 const PARTICIPATION_RESTRICTION_RULES = [
   {
     label: "지역 제한 불충족",
@@ -45,6 +164,17 @@ type InsightSearchResponse = {
   closingSoonTotal: number;
   averageScore: number;
   items: Bid[];
+};
+
+type HotKeywordDimension = typeof HOT_KEYWORD_DIMENSIONS[number]["value"];
+
+type HotKeywordResult = {
+  label: string;
+  count: number;
+  share: number;
+  heat: number;
+  change: number | null;
+  isNew: boolean;
 };
 
 const EMPTY_RESPONSE: InsightSearchResponse = {
@@ -80,6 +210,61 @@ function formatInsightBudget(value: number): string {
     return `${hundredMillion.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억원`;
   }
   return `${Math.round(value / 10_000).toLocaleString("ko-KR")}만원`;
+}
+
+function hotKeywordTerms(title: string): string[] {
+  const tokens = title.toLowerCase().match(/[a-z][a-z0-9+#.-]{1,}|[가-힣]{2,}/g) ?? [];
+  return [...new Set(tokens
+    .map((token) => token.replace(/^[.-]+|[.-]+$/g, ""))
+    .map((token) => HOT_KEYWORD_ALIASES.get(token) ?? token)
+    .filter((token) => token.length >= 2 && !HOT_KEYWORD_IGNORED_TERMS.has(token)))];
+}
+
+function hotKeywordResults(items: Bid[], limit = 10): HotKeywordResult[] {
+  if (items.length === 0) return [];
+  const midpoint = Math.max(1, Math.ceil(items.length / 2));
+  const recentSize = midpoint;
+  const previousSize = Math.max(1, items.length - midpoint);
+  const counts = new Map<string, { count: number; recent: number; previous: number; heat: number }>();
+
+  items.forEach((bid, index) => {
+    const recencyWeight = 1 + ((items.length - index) / items.length) * 0.45;
+    hotKeywordTerms(bid.title).forEach((keyword) => {
+      const current = counts.get(keyword) ?? { count: 0, recent: 0, previous: 0, heat: 0 };
+      current.count += 1;
+      current.heat += recencyWeight;
+      if (index < midpoint) current.recent += 1;
+      else current.previous += 1;
+      counts.set(keyword, current);
+    });
+  });
+
+  const minimumCount = items.length >= 100 ? 3 : items.length >= 30 ? 2 : 1;
+  return [...counts.entries()]
+    .filter(([, value]) => value.count >= minimumCount)
+    .map(([label, value]) => {
+      const recentRate = value.recent / recentSize;
+      const previousRate = value.previous / previousSize;
+      return {
+        label,
+        count: value.count,
+        share: Math.round((value.count / items.length) * 1_000) / 10,
+        heat: value.heat,
+        change: value.previous > 0
+          ? Math.round(((recentRate - previousRate) / previousRate) * 100)
+          : null,
+        isNew: value.previous === 0 && value.recent > 0,
+      };
+    })
+    .sort((left, right) => right.heat - left.heat || right.count - left.count
+      || left.label.localeCompare(right.label, "ko"))
+    .slice(0, limit);
+}
+
+function hotKeywordBudgetBand(budget: number): string {
+  if (!Number.isFinite(budget) || budget <= 0) return "unknown";
+  return HOT_KEYWORD_BUDGET_BANDS.find((band) => budget >= band.min && budget < band.max)?.value
+    ?? "unknown";
 }
 
 function participationRestrictionLabel(bid: Bid): string {
@@ -127,6 +312,8 @@ export default function InsightsPage() {
   const [targetCount, setTargetCount] = useState(INSIGHT_TARGET_SIZE);
   const [priorityOpportunities, setPriorityOpportunities] = useState<Bid[]>([]);
   const [restrictionBids, setRestrictionBids] = useState<Bid[]>([]);
+  const [hotKeywordDimension, setHotKeywordDimension] = useState<HotKeywordDimension>("all");
+  const [hotKeywordGroup, setHotKeywordGroup] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const insightRequestIdRef = useRef(0);
   const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
@@ -185,6 +372,7 @@ export default function InsightsPage() {
               onlyEligible: false,
               eligibilityMode: "not_eligible",
               closingWithinDays: null,
+              sortMode: "latest",
               semanticQuery: "",
               companyProfile: profile,
               page,
@@ -218,6 +406,7 @@ export default function InsightsPage() {
               excludeKeywords: [],
               onlyEligible: false,
               closingWithinDays: null,
+              sortMode: "latest",
               semanticQuery: "",
               companyProfile: profile,
               page,
@@ -361,6 +550,43 @@ export default function InsightsPage() {
       recoverableCount,
     };
   }, [companyProfile, restrictionBids, searchData]);
+
+  const hotKeywordGroups = useMemo(() => {
+    if (hotKeywordDimension === "category") {
+      const categoryOrder = ["용역", "물품", "공사"];
+      const available = new Set(searchData.items.map((bid) => bid.category));
+      return categoryOrder
+        .filter((category) => available.has(category as Bid["category"]))
+        .map((category) => ({ value: category, label: category }));
+    }
+    if (hotKeywordDimension === "region") {
+      return rankedInsightValues(
+        searchData.items.map((bid) => bid.region || "전국"),
+        17,
+      ).map((region) => ({ value: region.label, label: `${region.label} (${region.count}건)` }));
+    }
+    if (hotKeywordDimension === "budget") {
+      return HOT_KEYWORD_BUDGET_BANDS.map((band) => ({ value: band.value, label: band.label }));
+    }
+    return [{ value: "all", label: "전체 표본" }];
+  }, [hotKeywordDimension, searchData.items]);
+
+  const activeHotKeywordGroup = hotKeywordGroups.some((group) => group.value === hotKeywordGroup)
+    ? hotKeywordGroup
+    : hotKeywordGroups[0]?.value ?? "";
+
+  const hotKeywordAnalysis = useMemo(() => {
+    const scopedItems = searchData.items.filter((bid) => {
+      if (hotKeywordDimension === "category") return bid.category === activeHotKeywordGroup;
+      if (hotKeywordDimension === "region") return (bid.region || "전국") === activeHotKeywordGroup;
+      if (hotKeywordDimension === "budget") return hotKeywordBudgetBand(bid.budget) === activeHotKeywordGroup;
+      return true;
+    });
+    return {
+      sampleSize: scopedItems.length,
+      keywords: hotKeywordResults(scopedItems),
+    };
+  }, [activeHotKeywordGroup, hotKeywordDimension, searchData.items]);
 
   return (
     <main className={`app-shell insights-page ${theme}`}>
@@ -663,6 +889,108 @@ export default function InsightsPage() {
                 <p className="insight-empty">현재 분석할 참여 제한 요인이 없습니다.</p>
               )}
               <p className="restriction-footnote">공고별 주요 제한 요인 1개를 기준으로 집계했습니다.</p>
+            </article>
+
+            <article className="insight-panel hot-keyword-insight">
+              <div className="hot-keyword-heading">
+                <div className="insight-panel-head">
+                  <span className="insight-panel-icon hot-keyword" aria-hidden="true">#</span>
+                  <div>
+                    <h3>핫 키워드 동향</h3>
+                    <p>공고 제목의 출현 빈도와 최신 공고 가중치를 반영한 상위 키워드</p>
+                  </div>
+                </div>
+                <div className="hot-keyword-dimensions" role="tablist" aria-label="핫 키워드 분석 기준">
+                  {HOT_KEYWORD_DIMENSIONS.map((dimension) => (
+                    <button
+                      key={dimension.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={hotKeywordDimension === dimension.value}
+                      className={hotKeywordDimension === dimension.value ? "active" : ""}
+                      onClick={() => {
+                        setHotKeywordDimension(dimension.value);
+                        setHotKeywordGroup("");
+                      }}
+                    >
+                      {dimension.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="hot-keyword-toolbar">
+                <div>
+                  <strong>
+                    {HOT_KEYWORD_DIMENSIONS.find((dimension) => dimension.value === hotKeywordDimension)?.label}
+                  </strong>
+                  <span>
+                    {hotKeywordAnalysis.sampleSize.toLocaleString("ko-KR")}건 분석 · 상위 {hotKeywordAnalysis.keywords.length}개
+                  </span>
+                </div>
+                {hotKeywordDimension !== "all" && (
+                  <label>
+                    <span>세부 기준</span>
+                    <select
+                      aria-label="핫 키워드 세부 기준"
+                      value={activeHotKeywordGroup}
+                      onChange={(event) => setHotKeywordGroup(event.target.value)}
+                    >
+                      {hotKeywordGroups.map((group) => (
+                        <option key={group.value} value={group.value}>{group.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+
+              {hotKeywordAnalysis.keywords.length > 0 ? (
+                <ol className="hot-keyword-chart" aria-label="핫 키워드 순위 차트">
+                  {hotKeywordAnalysis.keywords.map((keyword, index) => {
+                    const maximumHeat = hotKeywordAnalysis.keywords[0]?.heat || 1;
+                    const width = Math.max(4, Math.round((keyword.heat / maximumHeat) * 100));
+                    const trendClass = keyword.isNew
+                      ? "new"
+                      : keyword.change !== null && keyword.change > 0
+                        ? "up"
+                        : keyword.change !== null && keyword.change < 0
+                          ? "down"
+                          : "steady";
+                    const trendLabel = keyword.isNew
+                      ? "신규"
+                      : keyword.change === null
+                        ? "비교 대기"
+                        : keyword.change > 0
+                          ? `▲ ${keyword.change.toLocaleString("ko-KR")}%`
+                          : keyword.change < 0
+                            ? `▼ ${Math.abs(keyword.change).toLocaleString("ko-KR")}%`
+                            : "유지";
+                    return (
+                      <li key={keyword.label}>
+                        <span className="hot-keyword-rank">{index + 1}</span>
+                        <strong>{keyword.label}</strong>
+                        <div
+                          className="hot-keyword-bar"
+                          role="img"
+                          aria-label={`${keyword.label} ${keyword.count}건, 비중 ${keyword.share}%`}
+                        >
+                          <i style={{ width: `${width}%` }} />
+                        </div>
+                        <span className="hot-keyword-count">
+                          {keyword.count.toLocaleString("ko-KR")}건
+                          <small>{keyword.share.toLocaleString("ko-KR")}%</small>
+                        </span>
+                        <em className={`hot-keyword-trend ${trendClass}`}>{trendLabel}</em>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="insight-empty">선택한 기준에서 분석할 키워드가 충분하지 않습니다.</p>
+              )}
+              <p className="hot-keyword-footnote">
+                동일 키워드는 공고당 1회 집계하며, 변화율은 선택 표본의 최근 절반과 이전 절반을 비교합니다.
+              </p>
             </article>
           </div>
         </div>

@@ -10,6 +10,7 @@ def _record(
     eligibility: str,
     days_left: int,
     deadline_known: bool = True,
+    announce_date: str = "",
 ) -> BidRecord:
     return BidRecord(
         id=bid_id,
@@ -22,6 +23,7 @@ def _record(
         days_left=days_left,
         score=score,
         eligibility=eligibility,
+        raw_data={"announceDate": announce_date or None},
     )
 
 
@@ -97,6 +99,44 @@ def test_opportunity_sort_is_opt_in_and_runs_before_pagination() -> None:
         "same-day-high",
         "urgent",
         "high-score",
+    ]
+
+
+def test_latest_sort_uses_announcement_date() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    base_records = [
+        _record(
+            "older-high-score",
+            score=95,
+            eligibility="참가 가능",
+            days_left=10,
+            announce_date="2026-07-01T09:00:00+00:00",
+        ),
+        _record(
+            "newest",
+            score=65,
+            eligibility="참가 가능",
+            days_left=10,
+            announce_date="2026-08-03T09:00:00+00:00",
+        ),
+        _record(
+            "middle",
+            score=75,
+            eligibility="참가 가능",
+            days_left=10,
+            announce_date="2026-07-20T09:00:00+00:00",
+        ),
+    ]
+    repository._ranked_records = lambda request: list(base_records)
+
+    records, *_ = repository.search_with_dashboard_metrics(
+        SearchRequest(sort_mode="latest")
+    )
+
+    assert [record.id for record in records] == [
+        "newest",
+        "middle",
+        "older-high-score",
     ]
 
 

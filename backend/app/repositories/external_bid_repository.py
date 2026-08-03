@@ -649,6 +649,7 @@ class ExternalBidRepository:
             request=request,
             company_profile=company_profile,
             semantic_similarity=semantic_similarity,
+            license_data_known=row.get("required_licenses") is not None,
         )
 
         return BidRecord.model_validate(
@@ -1085,6 +1086,13 @@ class ExternalBidRepository:
                     -record.score,
                     record.id,
                 )
+            )
+        elif request.sort_mode == "latest":
+            records.sort(
+                key=lambda record: str(
+                    record.raw_data.get("announceDate") or ""
+                ),
+                reverse=True,
             )
         total = len(records)
         average_score = (

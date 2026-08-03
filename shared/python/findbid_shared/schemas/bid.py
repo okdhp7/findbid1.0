@@ -85,7 +85,7 @@ class SearchRequest(CamelModel):
     only_eligible: bool = False
     eligibility_mode: Literal["not_eligible"] | None = None
     closing_within_days: int | None = None
-    sort_mode: Literal["opportunity"] | None = None
+    sort_mode: Literal["opportunity", "latest"] | None = None
     semantic_query: str = ""
     company_profile: CompanyProfileInput | None = None
     page: int = Field(default=1, ge=1)

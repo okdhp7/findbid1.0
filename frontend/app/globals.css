@@ -1807,6 +1807,12 @@ html[data-findbid-theme="light"] .app-shell {
   color: var(--red);
 }
 
+.app-shell .insight-panel-icon.hot-keyword {
+  background: linear-gradient(135deg, var(--amber-soft), var(--red-soft));
+  color: var(--amber);
+  font-weight: 800;
+}
+
 .app-shell .opportunity-summary {
   display: grid;
   gap: 8px;
@@ -2366,6 +2372,25 @@ html[data-findbid-theme="light"] .app-shell {
 
 .app-shell.insights-page .restriction-list li > strong,
 .app-shell.insights-page .restriction-footnote {
+  font-size: 12px;
+}
+
+.app-shell.insights-page .hot-keyword-dimensions button,
+.app-shell.insights-page .hot-keyword-toolbar strong,
+.app-shell.insights-page .hot-keyword-chart li > strong {
+  font-size: 14px;
+}
+
+.app-shell.insights-page .hot-keyword-toolbar > div span,
+.app-shell.insights-page .hot-keyword-toolbar label > span,
+.app-shell.insights-page .hot-keyword-toolbar select,
+.app-shell.insights-page .hot-keyword-count,
+.app-shell.insights-page .hot-keyword-footnote {
+  font-size: 13px;
+}
+
+.app-shell.insights-page .hot-keyword-count small,
+.app-shell.insights-page .hot-keyword-trend {
   font-size: 12px;
 }
 
@@ -5629,6 +5654,210 @@ html[data-findbid-theme="light"] .app-shell {
   text-align: center;
 }
 
+.app-shell .hot-keyword-insight {
+  grid-column: 1 / -1;
+}
+
+.app-shell .hot-keyword-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.app-shell .hot-keyword-heading .insight-panel-head {
+  margin-bottom: 12px;
+}
+
+.app-shell .hot-keyword-dimensions {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+}
+
+.app-shell .hot-keyword-dimensions button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 6px 11px;
+}
+
+.app-shell .hot-keyword-dimensions button:hover {
+  color: var(--text);
+}
+
+.app-shell .hot-keyword-dimensions button.active {
+  background: var(--panel-solid);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--accent-light);
+}
+
+.app-shell .hot-keyword-toolbar {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  min-height: 58px;
+  padding: 9px 0;
+}
+
+.app-shell .hot-keyword-toolbar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-shell .hot-keyword-toolbar strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.app-shell .hot-keyword-toolbar > div span,
+.app-shell .hot-keyword-toolbar label > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.app-shell .hot-keyword-toolbar label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.app-shell .hot-keyword-toolbar select {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  min-height: 34px;
+  min-width: 210px;
+  padding: 5px 30px 5px 10px;
+}
+
+.app-shell .hot-keyword-chart {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 0;
+}
+
+.app-shell .hot-keyword-chart li {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 28px minmax(100px, 0.55fr) minmax(180px, 2fr) 86px 72px;
+  min-height: 43px;
+}
+
+.app-shell .hot-keyword-chart li:first-child {
+  border-top: 0;
+}
+
+.app-shell .hot-keyword-rank {
+  align-items: center;
+  background: var(--panel-soft);
+  border-radius: 7px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.app-shell .hot-keyword-chart li:nth-child(-n + 3) .hot-keyword-rank {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.app-shell .hot-keyword-chart li > strong {
+  color: var(--text-soft);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .hot-keyword-bar {
+  background: var(--panel-soft);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.app-shell .hot-keyword-bar i {
+  background: linear-gradient(90deg, var(--accent), var(--amber));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 3px;
+}
+
+.app-shell .hot-keyword-count {
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.app-shell .hot-keyword-count small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.app-shell .hot-keyword-trend {
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  justify-self: end;
+  min-width: 62px;
+  padding: 4px 7px;
+  text-align: center;
+}
+
+.app-shell .hot-keyword-trend.up,
+.app-shell .hot-keyword-trend.new {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.app-shell .hot-keyword-trend.down {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.app-shell .hot-keyword-trend.steady {
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.app-shell .hot-keyword-footnote {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  margin: 4px 0 0;
+  padding-top: 10px;
+}
+
 .admin-notification-actions {
   display: flex;
   gap: 6px;
@@ -6346,6 +6575,53 @@ html[data-findbid-theme="light"] .app-shell {
 
   .app-shell .market-summary {
     grid-template-columns: 1fr;
+  }
+
+  .app-shell .hot-keyword-heading,
+  .app-shell .hot-keyword-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-shell .hot-keyword-dimensions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .app-shell .hot-keyword-toolbar {
+    gap: 10px;
+    padding: 10px 0;
+  }
+
+  .app-shell .hot-keyword-toolbar label {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .app-shell .hot-keyword-toolbar select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .app-shell .hot-keyword-chart li {
+    gap: 6px;
+    grid-template-columns: 28px minmax(80px, 1fr) 62px 66px;
+    padding: 8px 0;
+  }
+
+  .app-shell .hot-keyword-rank {
+    grid-row: 1 / 3;
+  }
+
+  .app-shell .hot-keyword-bar {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  .app-shell .hot-keyword-trend {
+    min-width: 60px;
   }
 
   .admin-shell {

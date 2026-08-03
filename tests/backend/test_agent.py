@@ -15,7 +15,7 @@ def test_natural_language_query_is_converted_to_filters() -> None:
     assert "장비 납품" in request.exclude_keywords
 
 
-def test_embedding_similarity_is_used_in_hybrid_score() -> None:
+def test_embedding_similarity_is_blended_with_lexical_evidence() -> None:
     score = calculate_hybrid_score(
         corpus="의미가 다른 표현으로 작성된 공고",
         budget=100_000_000,
@@ -37,4 +37,4 @@ def test_embedding_similarity_is_used_in_hybrid_score() -> None:
         semantic_similarity=92,
     )
 
-    assert score.breakdown["의미 유사도"] == 92
+    assert score.breakdown["의미 유사도"] == 74

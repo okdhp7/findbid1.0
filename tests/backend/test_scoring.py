@@ -209,3 +209,176 @@ def test_user_company_profile_changes_eligibility_and_excluded_area() -> None:
         "제외 사업 분야 일치" in item
         for item in excluded.unresolved_requirements
     )
+
+
+def test_missing_explicit_required_license_is_hard_failure() -> None:
+    result = calculate_hybrid_score(
+        corpus="AI 플랫폼 구축 소프트웨어 용역",
+        budget=200_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=["소프트웨어사업자"],
+        region_restriction="",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile={**COMPANY_PROFILE, "licenses": []},
+    )
+
+    assert result.eligibility == "참가 어려움"
+    assert result.score <= 39
+    assert "면허 확인: 소프트웨어사업자" in result.unresolved_requirements
+
+
+def test_adding_unrelated_capabilities_does_not_reduce_fit_or_confidence() -> None:
+    request = SearchRequest(semantic_query="생성형 AI Java 플랫폼 구축")
+    common = {
+        "corpus": "생성형 AI Java 플랫폼 구축",
+        "budget": 300_000_000,
+        "days_left": 10,
+        "deadline_known": True,
+        "is_new": False,
+        "required_licenses": [],
+        "region_restriction": "",
+        "sme_only": False,
+        "request": request,
+    }
+    base = calculate_hybrid_score(
+        **common,
+        company_profile={
+            **COMPANY_PROFILE,
+            "technologies": ["생성형 AI", "Java"],
+            "business_areas": [],
+            "completion": 100,
+        },
+    )
+    expanded = calculate_hybrid_score(
+        **common,
+        company_profile={
+            **COMPANY_PROFILE,
+            "technologies": [
+                "생성형 AI",
+                "Java",
+                *[f"무관 기술 {index}" for index in range(10)],
+            ],
+            "business_areas": [],
+            "completion": 100,
+        },
+    )
+
+    assert expanded.breakdown["보유 기술"] == base.breakdown["보유 기술"]
+    assert expanded.score == base.score
+    assert expanded.confidence == base.confidence
+
+
+def test_adding_unrelated_experience_does_not_dilute_matching_experience() -> None:
+    common = {
+        "corpus": "생성형 AI 플랫폼 구축 및 운영",
+        "budget": 300_000_000,
+        "days_left": 10,
+        "deadline_known": True,
+        "is_new": False,
+        "required_licenses": [],
+        "region_restriction": "",
+        "sme_only": False,
+        "request": SearchRequest(semantic_query="생성형 AI 플랫폼 구축"),
+    }
+    matching = calculate_hybrid_score(
+        **common,
+        company_profile={
+            **COMPANY_PROFILE,
+            "experiences": ["생성형 AI 플랫폼 구축"],
+        },
+    )
+    expanded = calculate_hybrid_score(
+        **common,
+        company_profile={
+            **COMPANY_PROFILE,
+            "experiences": ["생성형 AI 플랫폼 구축", "조경 시설물 유지관리"],
+        },
+    )
+
+    assert expanded.breakdown["유사 수행실적"] == matching.breakdown["유사 수행실적"]
+    assert expanded.score == matching.score
+
+
+def test_deadline_and_recency_are_excluded_from_fit_score() -> None:
+    common = {
+        "corpus": "생성형 AI 플랫폼 구축",
+        "budget": 300_000_000,
+        "required_licenses": [],
+        "region_restriction": "",
+        "sme_only": False,
+        "request": SearchRequest(semantic_query="생성형 AI 플랫폼 구축"),
+        "company_profile": COMPANY_PROFILE,
+    }
+    urgent = calculate_hybrid_score(
+        **common,
+        days_left=1,
+        deadline_known=True,
+        is_new=True,
+    )
+    relaxed = calculate_hybrid_score(
+        **common,
+        days_left=20,
+        deadline_known=True,
+        is_new=False,
+    )
+
+    assert "수행 준비도" not in urgent.breakdown
+    assert "신규 공고" not in urgent.breakdown
+    assert urgent.score == relaxed.score
+
+
+def test_unstructured_license_evidence_requires_original_notice_review() -> None:
+    result = calculate_hybrid_score(
+        corpus="AI 플랫폼 구축 입찰참가자격과 업종코드는 공고문 참조",
+        budget=300_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile=COMPANY_PROFILE,
+        license_data_known=False,
+    )
+
+    assert result.eligibility == "확인 필요"
+    assert any("공고문 확인 필요" in item for item in result.unresolved_requirements)
+
+
+def test_any_allowed_region_matches_company_location() -> None:
+    result = calculate_hybrid_score(
+        corpus="AI 플랫폼 구축",
+        budget=300_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="서울특별시 또는 경기도",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile=COMPANY_PROFILE,
+    )
+
+    assert result.eligibility == "참가 가능"
+    assert result.breakdown["참가 지역"] == 100
+
+
+def test_bid_below_preferred_max_budget_receives_full_budget_fit() -> None:
+    result = calculate_hybrid_score(
+        corpus="AI 플랫폼 구축",
+        budget=50_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile={**COMPANY_PROFILE, "preferred_max_budget": 500_000_000},
+    )
+
+    assert result.breakdown["사업 금액"] == 100

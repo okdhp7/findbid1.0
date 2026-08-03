@@ -43,17 +43,24 @@ REGION_ALIASES = {
     "경남": ("경상남도", "경남"),
     "제주": ("제주특별자치도", "제주도", "제주"),
 }
-WEIGHTS = {
-    "필수자격": 0.20,
-    "의미 유사도": 0.20,
-    "보유 기술": 0.15,
-    "유사 수행실적": 0.15,
-    "검색 키워드": 0.10,
+FIT_WEIGHTS = {
+    "필수자격": 0.22,
+    "의미 유사도": 0.22,
+    "보유 기술": 0.16,
+    "유사 수행실적": 0.16,
+    "검색 키워드": 0.11,
     "참가 지역": 0.07,
     "사업 금액": 0.06,
-    "수행 준비도": 0.04,
-    "신규 공고": 0.03,
 }
+QUALIFICATION_TERMS = (
+    "참가자격",
+    "입찰자격",
+    "면허",
+    "자격증",
+    "등록업체",
+    "직접생산",
+    "업종코드",
+)
 MATCHABLE_KNOWLEDGE_DOMAINS = {
     "품목·서비스",
     "사업 분야",
@@ -111,6 +118,31 @@ def _concept_matches(corpus: str, values: list[str]) -> list[str]:
         if any(_normalize(alias) in corpus for alias in aliases):
             matched.append(value)
     return matched
+
+
+def _matched_evidence_score(match_count: int) -> int:
+    """프로필 항목 수가 아니라 확인된 관련 근거 수를 점수화한다."""
+    if match_count <= 0:
+        return 0
+    return min(100, 70 + (match_count - 1) * 15)
+
+
+def _weighted_fit_score(
+    breakdown: dict[str, int],
+    active_names: list[str],
+) -> int:
+    active_weights = {
+        name: FIT_WEIGHTS[name]
+        for name in active_names
+        if name in FIT_WEIGHTS
+    }
+    weight_total = sum(active_weights.values())
+    if weight_total <= 0:
+        return 0
+    return round(
+        sum(breakdown[name] * weight for name, weight in active_weights.items())
+        / weight_total
+    )
 
 
 def _term_score(
@@ -199,6 +231,15 @@ def _region_key(value: str) -> str | None:
     return None
 
 
+def _region_keys(value: str) -> set[str]:
+    normalized = _normalize(value)
+    return {
+        key
+        for key, aliases in REGION_ALIASES.items()
+        if any(_normalize(alias) in normalized for alias in aliases)
+    }
+
+
 def _license_matches(requirement: str, licenses: list[str]) -> bool:
     requirement_text = _normalize(requirement)
     for license_name in licenses:
@@ -221,6 +262,7 @@ def _recommendation_confidence(
     budget: int,
     deadline_known: bool,
     required_licenses: list[str],
+    license_data_known: bool,
     region_restriction: str,
     sme_only: bool,
     semantic_similarity: int | None,
@@ -241,11 +283,7 @@ def _recommendation_confidence(
 
     unique_corpus_tokens = set(_tokens(corpus))
     corpus_quality = min(100, round(len(unique_corpus_tokens) / 18 * 100))
-    qualification_quality = (
-        100
-        if required_licenses or region_restriction.strip() or sme_only
-        else 70
-    )
+    qualification_quality = 100 if license_data_known else 45
     semantic_data_quality = (
         100
         if semantic_similarity is not None
@@ -261,25 +299,17 @@ def _recommendation_confidence(
         + semantic_data_quality * 0.15
     )
 
-    active_scores = [breakdown["필수자격"]]
-    if search_condition_values or semantic_similarity is not None:
-        active_scores.append(breakdown["의미 유사도"])
-    if capability_values:
-        active_scores.append(breakdown["보유 기술"])
-    if experiences:
-        active_scores.append(breakdown["유사 수행실적"])
-    if request.include_keywords:
-        active_scores.append(breakdown["검색 키워드"])
-    if region_restriction.strip():
-        active_scores.append(breakdown["참가 지역"])
-    if budget > 0 and effective_max_budget:
-        active_scores.append(breakdown["사업 금액"])
-    if deadline_known:
-        active_scores.append(breakdown["수행 준비도"])
-
-    evidence_clarity = round(
-        sum(abs(score - 50) * 2 for score in active_scores)
-        / len(active_scores)
+    evidence_flags = [
+        license_data_known,
+        bool(corpus.strip()),
+        bool(search_condition_values or semantic_similarity is not None),
+        bool(capability_values),
+        bool(experiences),
+        bool(budget > 0 and effective_max_budget),
+        deadline_known,
+    ]
+    evidence_coverage = round(
+        sum(evidence_flags) / len(evidence_flags) * 100
     )
     analysis_quality = (
         100
@@ -292,8 +322,8 @@ def _recommendation_confidence(
 
     confidence = round(
         profile_quality * 0.30
-        + bid_data_quality * 0.30
-        + evidence_clarity * 0.25
+        + bid_data_quality * 0.35
+        + evidence_coverage * 0.20
         + analysis_quality * 0.15
         - unresolved_penalty
     )
@@ -313,6 +343,7 @@ def calculate_hybrid_score(
     request: SearchRequest,
     company_profile: dict[str, Any],
     semantic_similarity: int | None = None,
+    license_data_known: bool = True,
 ) -> HybridScore:
     normalized_corpus = _normalize(corpus)
     licenses = [str(value) for value in company_profile.get("licenses", [])]
@@ -343,20 +374,26 @@ def calculate_hybrid_score(
             for requirement in required_licenses
             if not _license_matches(str(requirement), licenses)
         )
+        if matched_license_count < len(required_licenses):
+            hard_failure = True
+    elif not license_data_known and any(
+        term in normalized_corpus for term in QUALIFICATION_TERMS
+    ):
+        qualification_parts.append(50)
+        unresolved.append("면허·자격 정보가 구조화되지 않아 공고문 확인 필요")
     else:
         qualification_parts.append(100)
 
     company_region = _region_key(str(company_profile.get("location", "")))
-    required_region = _region_key(region_restriction)
+    required_regions = _region_keys(region_restriction)
     if not region_restriction.strip() or "전국" in region_restriction:
         region_score = 100
-    elif company_region and company_region == required_region:
+    elif company_region and company_region in required_regions:
         region_score = 100
     else:
         region_score = 0
         hard_failure = True
         unresolved.append(f"지역 제한 불일치: {region_restriction}")
-    qualification_parts.append(region_score)
 
     company_size = str(company_profile.get("size", ""))
     if sme_only and "중소" not in company_size and "소상공" not in company_size:
@@ -383,7 +420,7 @@ def calculate_hybrid_score(
     capability_values = [*technologies, *business_areas]
     matched_technologies = _concept_matches(normalized_corpus, capability_values)
     technology_score = (
-        round(len(matched_technologies) / len(capability_values) * 100)
+        _matched_evidence_score(len(matched_technologies))
         if capability_values
         else 50
     )
@@ -396,7 +433,10 @@ def calculate_hybrid_score(
         )
     )
     semantic_score = (
-        max(0, min(100, semantic_similarity))
+        round(
+            max(0, min(100, semantic_similarity)) * 0.80
+            + lexical_semantic_score * 0.20
+        )
         if semantic_similarity is not None
         else lexical_semantic_score
     )
@@ -406,10 +446,11 @@ def calculate_hybrid_score(
     )
 
     if experiences:
-        experience_score, matched_experiences = _term_score(
+        _, matched_experiences = _term_score(
             normalized_corpus,
             experiences,
         )
+        experience_score = _matched_evidence_score(len(matched_experiences))
     else:
         experience_score = 50
         matched_experiences = []
@@ -419,26 +460,13 @@ def calculate_hybrid_score(
     if budget <= 0 or not effective_max_budget:
         budget_score = 50
     elif budget <= int(effective_max_budget):
-        ratio = budget / int(effective_max_budget)
-        budget_score = 100 if ratio >= 0.35 else 85
+        budget_score = 100
     else:
         budget_score = max(
             0,
             round(100 - ((budget / int(effective_max_budget)) - 1) * 100),
         )
 
-    if not deadline_known:
-        readiness_score = 50
-    elif days_left >= 14:
-        readiness_score = 100
-    elif days_left >= 7:
-        readiness_score = 80
-    elif days_left >= 3:
-        readiness_score = 50
-    else:
-        readiness_score = 25
-
-    recency_score = 100 if is_new else 0
     breakdown = {
         "필수자격": qualification_score,
         "의미 유사도": semantic_score,
@@ -447,11 +475,10 @@ def calculate_hybrid_score(
         "검색 키워드": keyword_score,
         "참가 지역": region_score,
         "사업 금액": budget_score,
-        "수행 준비도": readiness_score,
-        "신규 공고": recency_score,
     }
-    weighted_score = round(
-        sum(breakdown[name] * weight for name, weight in WEIGHTS.items())
+    weighted_score = _weighted_fit_score(
+        breakdown,
+        list(FIT_WEIGHTS),
     )
 
     if hard_failure:
@@ -459,7 +486,6 @@ def calculate_hybrid_score(
         weighted_score = min(weighted_score, 39)
     elif unresolved:
         eligibility = "확인 필요"
-        weighted_score = min(weighted_score, 69)
     else:
         eligibility = "참가 가능"
 
@@ -468,6 +494,7 @@ def calculate_hybrid_score(
         budget=budget,
         deadline_known=deadline_known,
         required_licenses=required_licenses,
+        license_data_known=license_data_known,
         region_restriction=region_restriction,
         sme_only=sme_only,
         semantic_similarity=semantic_similarity,
@@ -483,8 +510,15 @@ def calculate_hybrid_score(
 
     matched = search_condition_matches
     reasons: list[str] = []
-    if eligibility == "참가 가능":
+    if eligibility == "참가 가능" and (
+        license_data_known or required_licenses or region_restriction.strip() or sme_only
+    ):
         reasons.append("현재 등록된 필수 참가자격을 충족합니다.")
+    elif eligibility == "참가 가능":
+        reasons.append(
+            "현재 구조화된 정보에서 명확한 참가 제한은 확인되지 않았으며 "
+            "공고문 원문 확인이 필요합니다."
+        )
     elif eligibility == "확인 필요":
         reasons.append(f"확인이 필요한 참가자격이 {len(unresolved)}건 있습니다.")
     else:
