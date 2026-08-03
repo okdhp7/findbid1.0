@@ -772,7 +772,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!filtersOpen || !window.matchMedia("(max-width: 860px)").matches) return;
+    if (!filtersOpen || !window.matchMedia("(max-width: 960px)").matches) return;
 
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
