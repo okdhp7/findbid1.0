@@ -716,7 +716,11 @@ test("인사이트 메뉴는 별도 페이지에서 시장과 기업 관점의 �
     new URL("../app/insights/page.tsx", import.meta.url),
     "utf8",
   );
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const [css, marketAnalyzer, marketRoute] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../../backend/app/market_insights.py", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/insights/market/route.ts", import.meta.url), "utf8"),
+  ]);
 
   assert.match(page, /<a href="\/insights">/);
   assert.doesNotMatch(page, /id="insight"/);
@@ -731,20 +735,22 @@ test("인사이트 메뉴는 별도 페이지에서 시장과 기업 관점의 �
   assert.match(insights, /업무구분별/);
   assert.match(insights, /지역별/);
   assert.match(insights, /금액대별/);
-  assert.match(insights, /function hotKeywordResults/);
-  assert.match(insights, /공고 제목의 출현 빈도와 최신 공고 가중치/);
+  assert.match(insights, /fetch\("\/api\/insights\/market"/);
+  assert.match(insights, /최근 6개월 마감 공고 포함/);
+  assert.match(insights, /최근 30일과 직전 30일/);
+  assert.match(insights, /제목 위치·분류 일치·문맥 응집도/);
   assert.match(
-    insights,
-    /HOT_KEYWORD_IGNORED_TERMS[\s\S]*?"학년도"[\s\S]*?"구매"[\s\S]*?"도입"[\s\S]*?"운영"[\s\S]*?"단계"/,
+    marketAnalyzer,
+    /IGNORED_KEYWORDS[\s\S]*?"학년도"[\s\S]*?"구매"[\s\S]*?"도입"[\s\S]*?"운영"[\s\S]*?"단계"/,
   );
-  assert.doesNotMatch(insights, /\["구매", "구매·도입"\]/);
+  assert.doesNotMatch(marketAnalyzer, /"구매": "구매·도입"/);
+  assert.match(marketAnalyzer, /recent_start = period_end - timedelta\(days=30\)/);
+  assert.match(marketRoute, /insights\/market\?months=6/);
   assert.match(insights, /className="active" href="\/insights" aria-current="page"/);
   assert.match(insights, /const INSIGHT_PAGE_SIZE = 200/);
-  assert.match(insights, /const INSIGHT_TARGET_SIZE = 1_000/);
-  assert.match(insights, /page <= maximumPages/);
-  assert.match(insights, /uniqueBids\.set\(bid\.id, bid\)/);
-  assert.match(insights, /건 분석 중/);
-  assert.equal((insights.match(/sortMode: "latest"/g) ?? []).length, 2);
+  assert.match(insights, /const RESTRICTION_TARGET_SIZE = 1_000/);
+  assert.match(insights, /6개월 데이터 분석 중/);
+  assert.equal((insights.match(/sortMode: "latest"/g) ?? []).length, 1);
   assert.match(css, /\.app-shell \.insight-dashboard/);
   assert.match(css, /\.app-shell \.insights-main/);
   assert.match(css, /\.app-shell \.insight-grid/);
