@@ -305,7 +305,7 @@ function companyProfileInitials(name: string): string {
     .trim()
     .replace(/^(?:주식회사|유한회사|합자회사|합명회사|㈜|\(주\)|（주）)\s*/, "")
     .trim();
-  const words = normalized.match(/[A-Za-z0-9가-힣]+/g) ?? [];
+  const words = (normalized.match(/[A-Za-z0-9가-힣]+/g) ?? []) as string[];
   if (words.length === 0) return "기업";
 
   const firstWord = words[0];
