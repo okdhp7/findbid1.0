@@ -1210,7 +1210,8 @@ html[data-findbid-theme="light"] .app-shell {
 
 .app-shell .filter-group select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: none;
+  outline: none;
 }
 
 .app-shell select option {

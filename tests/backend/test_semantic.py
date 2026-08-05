@@ -302,13 +302,15 @@ def test_preferred_region_ranks_local_before_nationwide_and_other_regions() -> N
             "bid_number": "nationwide",
             "title": "학생복 구매",
             "description": "신입생 학생복 구매",
-            "region_name": None,
+            "region_restriction": "",
+            "region_name": "경기도 수원시",
             "noticer_name": "교육부",
         },
         {
             "bid_number": "other",
             "title": "학생복 구매",
             "description": "신입생 학생복 구매",
+            "region_restriction": "본사또는참여지사소재지",
             "region_name": "서울특별시",
             "noticer_name": "서울특별시교육청",
         },
@@ -316,7 +318,8 @@ def test_preferred_region_ranks_local_before_nationwide_and_other_regions() -> N
             "bid_number": "local",
             "title": "학생복 구매",
             "description": "신입생 학생복 구매",
-            "region_name": None,
+            "region_restriction": "본사또는참여지사소재지",
+            "region_name": "경기도 성남시",
             "noticer_name": "경기도교육청",
         },
     ]
@@ -349,6 +352,44 @@ def test_preferred_region_ranks_local_before_nationwide_and_other_regions() -> N
         rows[1],
         ("경기",),
     ) == 0
+
+
+def test_participant_region_uses_restriction_and_metropolitan_label() -> None:
+    assert ExternalBidRepository._participant_region(
+        {
+            "region_restriction": "",
+            "region_name": "경상북도 상주시",
+        }
+    ) == "전국"
+    assert ExternalBidRepository._participant_region(
+        {
+            "region_restriction": "본사또는참여지사소재지",
+            "region_name": "경상북도 상주시",
+        }
+    ) == "경북"
+    assert ExternalBidRepository._participant_region(
+        {
+            "region_restriction": "본사소재지",
+            "region_name": "충청남도 천안시",
+        }
+    ) == "충남"
+
+
+def test_region_filter_uses_restriction_for_nationwide_rows() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    conditions, params, order_by = repository._search_parts(
+        SearchRequest(region="경북")
+    )
+
+    region_condition = next(
+        condition for condition in conditions if "region_prefix_0" in condition
+    )
+    assert "coalesce(btrim(b.region_restriction), '') = ''" in region_condition
+    assert "coalesce(btrim(b.region_restriction), '') <> ''" in region_condition
+    assert "b.region_name LIKE :region_prefix_0" in region_condition
+    assert params["region_prefix_0"] == "경상북도%"
+    assert "b.region_name IS NULL" not in region_condition
+    assert "b.region_restriction" in order_by
 
 
 def test_all_bid_knowledge_domains_are_loaded() -> None:

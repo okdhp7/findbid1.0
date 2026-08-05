@@ -91,7 +91,11 @@ def test_unresolved_requirements_reduce_recommendation_confidence() -> None:
         "required_licenses": [],
         "sme_only": False,
         "request": SearchRequest(semantic_query="AI 플랫폼 구축"),
-        "company_profile": {**COMPANY_PROFILE, "completion": 100},
+        "company_profile": {
+            **COMPANY_PROFILE,
+            "service_regions": ["경기"],
+            "completion": 100,
+        },
         "semantic_similarity": 85,
     }
     nationwide = calculate_hybrid_score(
@@ -118,12 +122,79 @@ def test_region_failure_caps_score_and_exposes_reason() -> None:
         region_restriction="부산광역시",
         sme_only=False,
         request=SearchRequest(semantic_query="AI 플랫폼"),
-        company_profile=COMPANY_PROFILE,
+        company_profile={**COMPANY_PROFILE, "service_regions": ["경기"]},
     )
 
     assert result.eligibility == "참가 어려움"
     assert result.score <= 39
-    assert any("지역 제한 불일치" in item for item in result.unresolved_requirements)
+    assert any("수행 가능 지역 불일치" in item for item in result.unresolved_requirements)
+
+
+def test_service_region_matches_bid_participant_region() -> None:
+    result = calculate_hybrid_score(
+        corpus="경북 지역 AI 플랫폼 구축",
+        budget=300_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="경북",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile={
+            **COMPANY_PROFILE,
+            "location": "경기도 성남시",
+            "service_regions": ["경북", "경남"],
+        },
+    )
+
+    assert result.breakdown["참가 지역"] == 100
+    assert result.eligibility == "참가 가능"
+    assert not any("지역 불일치" in item for item in result.unresolved_requirements)
+
+
+def test_empty_service_regions_fall_back_to_company_location() -> None:
+    result = calculate_hybrid_score(
+        corpus="경기 지역 AI 플랫폼 구축",
+        budget=300_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="경기",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile={
+            **COMPANY_PROFILE,
+            "location": "경기도 성남시",
+            "service_regions": [],
+        },
+    )
+
+    assert result.breakdown["참가 지역"] == 100
+    assert result.eligibility == "참가 가능"
+
+
+def test_all_service_regions_match_any_participant_region() -> None:
+    result = calculate_hybrid_score(
+        corpus="부산 지역 AI 플랫폼 구축",
+        budget=300_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="부산",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile={
+            **COMPANY_PROFILE,
+            "location": "경기도 성남시",
+            "service_regions": ["전체 지역"],
+        },
+    )
+
+    assert result.breakdown["참가 지역"] == 100
+    assert result.eligibility == "참가 가능"
 
 
 def test_matched_items_only_show_canonical_search_conditions() -> None:

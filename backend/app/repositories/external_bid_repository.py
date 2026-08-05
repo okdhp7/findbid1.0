@@ -35,6 +35,7 @@ from findbid_shared.schemas import BidRecord, SearchRequest
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 logger = logging.getLogger(__name__)
 SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+NATIONWIDE_REGION_SQL = "coalesce(btrim(b.region_restriction), '') = ''"
 REGION_PREFIXES = {
     "서울": ("서울특별시",),
     "부산": ("부산광역시",),
@@ -125,13 +126,23 @@ class ExternalBidRepository:
         return "자격 확인 필요"
 
     @staticmethod
-    def _region(region_name: str | None) -> str:
+    def _short_region(region_name: str | None) -> str:
+        region_name = str(region_name or "").strip()
         if not region_name:
-            return "전국"
+            return ""
         for short_name, prefixes in REGION_PREFIXES.items():
             if region_name.startswith(prefixes):
                 return short_name
         return region_name
+
+    @classmethod
+    def _participant_region(cls, row: dict[str, Any]) -> str:
+        restriction = str(row.get("region_restriction") or "").strip()
+        if not restriction:
+            return "전국"
+
+        region = cls._short_region(row.get("region_name"))
+        return region or "지역 확인 필요"
 
     @staticmethod
     def _days_left(deadline: datetime | None) -> int:
@@ -382,30 +393,25 @@ class ExternalBidRepository:
             and get_semantic_search_engine().enabled
         )
 
-    @staticmethod
+    @classmethod
     def _preferred_region_priority(
+        cls,
         row: dict[str, Any],
         preferred_regions: tuple[str, ...],
     ) -> int:
         if not preferred_regions:
             return 0
 
-        bid_region = str(row.get("region_name") or "").strip().lower()
-        locality_text = " ".join(
-            str(row.get(key) or "").strip().lower()
-            for key in (
-                "region_name",
-                "noticer_name",
-                "agency_name",
-            )
-        )
+        participant_region = cls._participant_region(row)
+        if participant_region == "전국":
+            return 1
+
+        locality_text = str(row.get("region_name") or "").strip().lower()
         if any(
             any(alias in locality_text for alias in region_aliases(region))
             for region in preferred_regions
         ):
             return 2
-        if not bid_region or "전국" in bid_region:
-            return 1
         return 0
 
     @classmethod
@@ -630,6 +636,7 @@ class ExternalBidRepository:
             <= 7
         )
         days_left = self._days_left(row.get("deadline"))
+        participant_region = self._participant_region(row)
         company_profile = (
             request.company_profile.model_dump(by_alias=False)
             if request.company_profile is not None
@@ -644,7 +651,7 @@ class ExternalBidRepository:
             required_licenses=[
                 str(value) for value in (row.get("required_licenses") or [])
             ],
-            region_restriction=str(row.get("region_restriction") or ""),
+            region_restriction=participant_region,
             sme_only=bool(row.get("sme_only")),
             request=request,
             company_profile=company_profile,
@@ -664,7 +671,7 @@ class ExternalBidRepository:
                 "demand_agency": row.get("agency_name")
                 or row.get("noticer_name")
                 or "기관 미정",
-                "region": self._region(row.get("region_name")),
+                "region": participant_region,
                 "budget": budget,
                 "budget_label": self._budget_label(budget),
                 "contract_method": row.get("contract_method") or "확인 필요",
@@ -774,26 +781,32 @@ class ExternalBidRepository:
             conditions.append("b.category = :category")
             params["category"] = category
         if analysis.participant_regions:
-            region_conditions = ["b.region_name IS NULL"]
+            region_conditions = [NATIONWIDE_REGION_SQL]
             for region_index, region in enumerate(analysis.participant_regions):
                 prefixes = REGION_PREFIXES.get(region, (region,))
                 for prefix_index, prefix in enumerate(prefixes):
                     name = (
                         f"intent_region_{region_index}_{prefix_index}"
                     )
-                    region_conditions.append(f"b.region_name LIKE :{name}")
+                    region_conditions.append(
+                        "(coalesce(btrim(b.region_restriction), '') <> '' "
+                        f"AND b.region_name LIKE :{name})"
+                    )
                     params[name] = f"{prefix}%"
             conditions.append(f"({' OR '.join(region_conditions)})")
         elif request.region and request.region != "전체 지역":
-            region_conditions = ["b.region_name IS NULL"]
+            region_conditions = [NATIONWIDE_REGION_SQL]
             prefixes = REGION_PREFIXES.get(request.region, (request.region,))
             for index, prefix in enumerate(prefixes):
                 name = f"region_prefix_{index}"
-                region_conditions.append(f"b.region_name LIKE :{name}")
+                region_conditions.append(
+                    "(coalesce(btrim(b.region_restriction), '') <> '' "
+                    f"AND b.region_name LIKE :{name})"
+                )
                 params[name] = f"{prefix}%"
             conditions.append(f"({' OR '.join(region_conditions)})")
             order_by = (
-                "CASE WHEN b.region_name IS NULL THEN 1 ELSE 0 END, "
+                f"CASE WHEN {NATIONWIDE_REGION_SQL} THEN 1 ELSE 0 END, "
                 + order_by
             )
 

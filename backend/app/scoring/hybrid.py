@@ -356,6 +356,11 @@ def calculate_hybrid_score(
         str(value)
         for value in company_profile.get("excluded_business_areas", [])
     ]
+    service_regions = [
+        str(value).strip()
+        for value in company_profile.get("service_regions", [])
+        if str(value).strip()
+    ]
 
     unresolved: list[str] = []
     qualification_parts: list[int] = []
@@ -386,14 +391,32 @@ def calculate_hybrid_score(
 
     company_region = _region_key(str(company_profile.get("location", "")))
     required_regions = _region_keys(region_restriction)
+    service_region_keys = {
+        region
+        for value in service_regions
+        for region in _region_keys(value)
+    }
+    serves_nationwide = any(
+        _normalize(value).replace(" ", "") in {"전국", "전체지역"}
+        for value in service_regions
+    )
     if not region_restriction.strip() or "전국" in region_restriction:
         region_score = 100
+    elif service_regions and (
+        serves_nationwide
+        or bool(service_region_keys & required_regions)
+    ):
+        region_score = 100
+    elif service_regions:
+        region_score = 0
+        hard_failure = True
+        unresolved.append(f"수행 가능 지역 불일치: {region_restriction}")
     elif company_region and company_region in required_regions:
         region_score = 100
     else:
         region_score = 0
         hard_failure = True
-        unresolved.append(f"지역 제한 불일치: {region_restriction}")
+        unresolved.append(f"기업 소재지 불일치: {region_restriction}")
 
     company_size = str(company_profile.get("size", ""))
     if sme_only and "중소" not in company_size and "소상공" not in company_size:
