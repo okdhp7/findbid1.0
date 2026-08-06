@@ -649,6 +649,7 @@ export default function Home() {
   const [searchTraceId, setSearchTraceId] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [searchTraceOpen, setSearchTraceOpen] = useState(false);
+  const [recommendationNoticeOpen, setRecommendationNoticeOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchError, setSearchError] = useState("");
   const [selected, setSelected] = useState<Bid | null>(null);
@@ -2134,7 +2135,38 @@ export default function Home() {
                   {searchTotal.toLocaleString("ko-KR")}<em>건</em>
                 </span>
               </h2>
-              <p>G2B API에 의하여 수집된 입찰공고를 기준으로 검색하며, 모든 나라장터 입찰공고를 포함하는것을 보장하지는 않습니다.</p>
+              <div className="recommendation-notice">
+                <button
+                  className="recommendation-notice-trigger"
+                  type="button"
+                  aria-controls="recommendation-notice-popover"
+                  aria-expanded={recommendationNoticeOpen}
+                  onClick={() => setRecommendationNoticeOpen(true)}
+                >
+                  <span className="recommendation-notice-icon" aria-hidden="true">⚠</span>
+                  주의사항 보기
+                </button>
+                {recommendationNoticeOpen && (
+                  <div
+                    id="recommendation-notice-popover"
+                    className="recommendation-notice-popover"
+                    role="dialog"
+                    aria-label="입찰공고 주의사항"
+                  >
+                    <p>
+                      제공되는 정보는 G2B API에 의하여 수집된 입찰공고를 기준으로 검색하며, 모든 나라장터 입찰공고를 포함하는것을 보장하지는 않습니다.
+                      <br></br>모든 입찰공고의 정보는 나라장터 원문의 내용과 다를 수 있으므로 반드시 공고 원문 및 첨부 파일을 확인하시기 바랍니다.
+                      <br></br>또한, 추천 입찰공고는 현재 주어진 정보에 근거하여 AI가 분석한 결과를 기반으로 제공되며, 실제 입찰 결과와 다를 수 있습니다.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setRecommendationNoticeOpen(false)}
+                    >
+                      확인
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="toolbar-actions">
               <select

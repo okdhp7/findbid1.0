@@ -326,6 +326,23 @@ test("관심공고를 브라우저에 저장하고 별도 모달로 표시한다
   assert.equal((page.match(/className="theme-icon"/g) ?? []).length, 2);
 });
 
+test("추천 입찰공고 주의사항을 팝오버로 표시하고 확인 버튼으로 닫는다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const \[recommendationNoticeOpen, setRecommendationNoticeOpen\] = useState\(false\)/);
+  assert.match(page, /주의사항 보기\s*<\/button>/);
+  assert.match(page, /aria-controls="recommendation-notice-popover"/);
+  assert.match(page, /className="recommendation-notice-icon" aria-hidden="true">⚠<\/span>/);
+  assert.match(page, /role="dialog"/);
+  assert.match(page, /모든 입찰공고의 정보는 나라장터 원문의 내용과 다를 수 있으므로 반드시 공고 원문 및 첨부 파일을 확인하시기 바랍니다/);
+  assert.match(page, /onClick=\{\(\) => setRecommendationNoticeOpen\(false\)\}/);
+  assert.match(css, /\.app-shell \.recommendation-notice-popover/);
+  assert.match(css, /html\[data-findbid-theme="dark"\] \.app-shell \.recommendation-notice-trigger/);
+});
+
 test("주요 메뉴에 심플한 선형 아이콘을 표시한다", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -863,6 +880,7 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
   assert.match(about, /서비스 소개 \| FindBid/);
   assert.match(privacy, /개인정보처리방침 \| FindBid/);
   assert.match(terms, /이용약관 \| FindBid/);
+  assert.match(terms, /추천 입찰공고는 현재 제공된 정보에 근거하여 AI가 분석한 결과를 기반으로 제공되며, 실제 입찰 결과와 다를 수 있습니다/);
   assert.match(css, /\.app-shell \.site-footer/);
   assert.match(css, /\.app-shell \.site-footer-contact-row button/);
   assert.match(footer, /className="site-footer-contact-row"/);

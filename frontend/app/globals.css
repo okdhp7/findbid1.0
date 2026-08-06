@@ -3005,10 +3005,108 @@ html[data-findbid-theme="light"] .app-shell {
   margin-left: 2px;
 }
 
-.app-shell .result-toolbar p {
-  color: var(--muted);
+.app-shell .recommendation-notice {
+  display: inline-flex;
+  position: relative;
+}
+
+.app-shell .recommendation-notice-trigger {
+  align-items: center;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: var(--radius-sm);
+  color: #9a3412;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
   font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  padding: 6px 10px;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.app-shell .recommendation-notice-trigger:hover {
+  background: #ffedd5;
+  border-color: #fb923c;
+  color: #7c2d12;
+}
+
+.app-shell .recommendation-notice-icon {
+  color: #ea580c;
+  font-size: 14px;
+  line-height: 1;
+}
+
+html[data-findbid-theme="dark"] .app-shell .recommendation-notice-trigger {
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(251, 146, 60, 0.55);
+  color: #fed7aa;
+}
+
+html[data-findbid-theme="dark"] .app-shell .recommendation-notice-trigger:hover {
+  background: rgba(249, 115, 22, 0.22);
+  border-color: #fb923c;
+  color: #ffedd5;
+}
+
+html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
+  color: #fb923c;
+}
+
+.app-shell .recommendation-notice-popover {
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  display: grid;
+  gap: 14px;
+  left: 0;
+  max-width: calc(100vw - 48px);
+  padding: 16px;
+  position: absolute;
+  top: calc(100% + 10px);
+  width: 520px;
+  z-index: 80;
+}
+
+.app-shell .recommendation-notice-popover::before {
+  background: var(--panel-solid);
+  border-left: 1px solid var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  content: "";
+  height: 10px;
+  left: 18px;
+  position: absolute;
+  top: -6px;
+  transform: rotate(45deg);
+  width: 10px;
+}
+
+.app-shell .recommendation-notice-popover p {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.7;
   margin: 0;
+}
+
+.app-shell .recommendation-notice-popover button {
+  align-self: end;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  justify-self: end;
+  min-width: 72px;
+  padding: 8px 14px;
+}
+
+.app-shell .recommendation-notice-popover button:hover {
+  background: var(--accent-deep);
 }
 
 .app-shell .toolbar-actions {
