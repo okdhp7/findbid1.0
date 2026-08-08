@@ -43,6 +43,16 @@ type AgencyTypeOption = {
   details: AgencyTypeDetail[];
 };
 
+type AgencySuggestion = {
+  agencyCode: string;
+  agencyName: string;
+  topLevelAgencyCode: string;
+  topLevelAgencyName: string;
+  agencyCount: number;
+  bidCount: number;
+  isTopLevel: boolean;
+};
+
 const agencyTypeOptions: AgencyTypeOption[] = [
   {
     name: "공기업",
@@ -114,6 +124,7 @@ type SearchSnapshot = {
   maxBudget: number;
   includeKeyword: string;
   excludeKeyword: string;
+  demandAgencyInput: string;
   semanticQuery: string;
   onlyEligible: boolean;
   closingSoon: boolean;
@@ -127,6 +138,7 @@ const DEFAULT_SEARCH: SearchSnapshot = {
   maxBudget: 0,
   includeKeyword: "",
   excludeKeyword: "",
+  demandAgencyInput: "",
   semanticQuery: "",
   onlyEligible: false,
   closingSoon: false,
@@ -142,6 +154,8 @@ const INSIGHTS_OPPORTUNITY_SEARCH: SearchSnapshot = {
 
 const PAGE_SIZE = 20;
 const PAGE_JUMP = 5;
+const AGENCY_SUGGESTION_PAGE_SIZE = 20;
+const AGENCY_SUGGESTION_MAX = 100;
 
 type SavedSearch = {
   id: string;
@@ -153,6 +167,28 @@ type SavedSearch = {
 const SAVED_SEARCHES_KEY = "findbid.saved-searches.v1";
 const SEMANTIC_HISTORY_KEY = "findbid.semantic-history.v1";
 const SEMANTIC_HISTORY_LIMIT = 10;
+const INCLUDE_KEYWORD_HISTORY_KEY = "findbid.include-keyword-history.v1";
+const EXCLUDE_KEYWORD_HISTORY_KEY = "findbid.exclude-keyword-history.v1";
+const DEMAND_AGENCY_HISTORY_KEY = "findbid.demand-agency-history.v1";
+const KEYWORD_HISTORY_LIMIT = 5;
+
+function splitDemandAgencies(value: string): string[] {
+  return Array.from(new Set(
+    value
+      .split(/[,，\n]/)
+      .map((agency) => agency.trim())
+      .filter(Boolean),
+  )).slice(0, 20);
+}
+
+function activeDemandAgencyFragment(value: string): string {
+  return value.split(/[,，\n]/).at(-1)?.trim() ?? "";
+}
+
+function replaceDemandAgencyFragment(value: string, agencyName: string): string {
+  const completed = value.split(/[,，\n]/).slice(0, -1).map((agency) => agency.trim()).filter(Boolean);
+  return `${[...completed, agencyName].join(", ")}, `;
+}
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const SAVED_BIDS_KEY = "findbid.saved-bids.v1";
 const SAVED_BIDS_LIMIT = 50;
@@ -699,7 +735,28 @@ export default function Home() {
   const [region, setRegion] = useState(DEFAULT_SEARCH.region);
   const [maxBudget, setMaxBudget] = useState(DEFAULT_SEARCH.maxBudget);
   const [includeKeyword, setIncludeKeyword] = useState(DEFAULT_SEARCH.includeKeyword);
+  const includeKeywordInputRef = useRef<HTMLInputElement>(null);
+  const [includeKeywordOverflowing, setIncludeKeywordOverflowing] = useState(false);
+  const [includeKeywordHistory, setIncludeKeywordHistory] = useState<string[]>([]);
   const [excludeKeyword, setExcludeKeyword] = useState(DEFAULT_SEARCH.excludeKeyword);
+  const excludeKeywordInputRef = useRef<HTMLInputElement>(null);
+  const [excludeKeywordOverflowing, setExcludeKeywordOverflowing] = useState(false);
+  const [excludeKeywordHistory, setExcludeKeywordHistory] = useState<string[]>([]);
+  const [keywordHistoryOpen, setKeywordHistoryOpen] = useState<
+    "include" | "exclude" | "demandAgency" | null
+  >(null);
+  const [demandAgencyInput, setDemandAgencyInput] = useState(
+    DEFAULT_SEARCH.demandAgencyInput,
+  );
+  const demandAgencyInputRef = useRef<HTMLInputElement>(null);
+  const [demandAgencyInputOverflowing, setDemandAgencyInputOverflowing] = useState(false);
+  const [demandAgencyHistory, setDemandAgencyHistory] = useState<string[]>([]);
+  const [agencySuggestions, setAgencySuggestions] = useState<AgencySuggestion[]>([]);
+  const [agencySuggestionsOpen, setAgencySuggestionsOpen] = useState(false);
+  const [agencySuggestionLimit, setAgencySuggestionLimit] = useState(
+    AGENCY_SUGGESTION_PAGE_SIZE,
+  );
+  const [agencySuggestionsHasMore, setAgencySuggestionsHasMore] = useState(false);
   const [semanticQuery, setSemanticQuery] = useState(DEFAULT_SEARCH.semanticQuery);
   const [semanticQueryActive, setSemanticQueryActive] = useState(false);
   const [semanticHistoryOpen, setSemanticHistoryOpen] = useState(false);
@@ -714,6 +771,7 @@ export default function Home() {
   );
   const [sort, setSort] = useState("score");
   const [searched, setSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [resultBids, setResultBids] = useState<Bid[]>([]);
   const [databaseTotal, setDatabaseTotal] = useState(0);
   const [searchTotal, setSearchTotal] = useState(0);
@@ -827,6 +885,119 @@ export default function Home() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const query = activeDemandAgencyFragment(demandAgencyInput);
+    if (query.length < 2) {
+      setAgencySuggestions([]);
+      setAgencySuggestionsHasMore(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void fetch(
+        `/api/company/agency-suggestions?q=${encodeURIComponent(query)}&limit=${agencySuggestionLimit}`,
+        { cache: "no-store", signal: controller.signal },
+      )
+        .then(async (response) => {
+          if (!response.ok) return { items: [], hasMore: false };
+          const data = await response.json() as {
+            items?: AgencySuggestion[];
+            hasMore?: boolean;
+          };
+          return {
+            items: Array.isArray(data.items) ? data.items : [],
+            hasMore: data.hasMore === true,
+          };
+        })
+        .then(({ items, hasMore }) => {
+          setAgencySuggestions(items);
+          setAgencySuggestionsHasMore(hasMore);
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof Error && error.name === "AbortError")) {
+            setAgencySuggestions([]);
+            setAgencySuggestionsHasMore(false);
+          }
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [demandAgencyInput, agencySuggestionLimit]);
+
+  useEffect(() => {
+    const input = demandAgencyInputRef.current;
+    if (!input) return;
+
+    const measure = () => {
+      setDemandAgencyInputOverflowing(
+        input.scrollWidth > input.clientWidth + 1,
+      );
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [demandAgencyInput]);
+
+  useEffect(() => {
+    const input = includeKeywordInputRef.current;
+    if (!input) return;
+
+    const measure = () => {
+      setIncludeKeywordOverflowing(
+        input.scrollWidth > input.clientWidth + 1,
+      );
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [includeKeyword]);
+
+  useEffect(() => {
+    const input = excludeKeywordInputRef.current;
+    if (!input) return;
+
+    const measure = () => {
+      setExcludeKeywordOverflowing(
+        input.scrollWidth > input.clientWidth + 1,
+      );
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [excludeKeyword]);
+
+  useEffect(() => {
+    const restoreKeywordHistory = (key: string) => {
+      try {
+        const stored = window.localStorage.getItem(key);
+        if (!stored) return [];
+        const parsed = JSON.parse(stored) as unknown;
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .filter((value): value is string =>
+            typeof value === "string" && Boolean(value.trim()),
+          )
+          .map((value) => value.trim())
+          .slice(0, KEYWORD_HISTORY_LIMIT);
+      } catch {
+        window.localStorage.removeItem(key);
+        return [];
+      }
+    };
+
+    setIncludeKeywordHistory(restoreKeywordHistory(INCLUDE_KEYWORD_HISTORY_KEY));
+    setExcludeKeywordHistory(restoreKeywordHistory(EXCLUDE_KEYWORD_HISTORY_KEY));
+    setDemandAgencyHistory(restoreKeywordHistory(DEMAND_AGENCY_HISTORY_KEY));
   }, []);
 
   useEffect(() => {
@@ -953,6 +1124,7 @@ export default function Home() {
     maxBudget,
     includeKeyword,
     excludeKeyword,
+    demandAgencyInput,
     semanticQuery,
     onlyEligible,
     closingSoon,
@@ -966,7 +1138,7 @@ export default function Home() {
     searchAbortControllerRef.current?.abort();
     const controller = new AbortController();
     searchAbortControllerRef.current = controller;
-    setSearched(false);
+    setIsSearching(true);
     setSearchError("");
     setCurrentPage(page);
     try {
@@ -980,6 +1152,7 @@ export default function Home() {
           maxBudget: snapshot.maxBudget,
           includeKeywords: snapshot.includeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
           excludeKeywords: snapshot.excludeKeyword.split(/[,，]/).map((word) => word.trim()).filter(Boolean),
+          demandAgencies: splitDemandAgencies(snapshot.demandAgencyInput),
           onlyEligible: snapshot.onlyEligible,
           closingWithinDays: snapshot.closingWithinDays
             ?? (snapshot.closingSoon ? 7 : null),
@@ -1057,6 +1230,7 @@ export default function Home() {
     } finally {
       if (requestId === searchRequestIdRef.current) {
         setSearched(true);
+        setIsSearching(false);
       }
     }
   }, []);
@@ -1258,12 +1432,95 @@ export default function Home() {
     setSearchTraceOpen(false);
   };
 
+  const rememberKeywordHistory = (
+    kind: "include" | "exclude" | "demandAgency",
+    value: string,
+  ) => {
+    const normalizedValue = kind === "demandAgency"
+      ? value.trim().replace(/[,，]+$/, "").trim()
+      : value.trim();
+    if (!normalizedValue) return;
+
+    const storageKey = kind === "include"
+      ? INCLUDE_KEYWORD_HISTORY_KEY
+      : kind === "exclude"
+      ? EXCLUDE_KEYWORD_HISTORY_KEY
+      : DEMAND_AGENCY_HISTORY_KEY;
+    const setHistory = kind === "include"
+      ? setIncludeKeywordHistory
+      : kind === "exclude"
+      ? setExcludeKeywordHistory
+      : setDemandAgencyHistory;
+    setHistory((current) => {
+      const comparisonValue = normalizedValue.toLocaleLowerCase("ko-KR");
+      const next = [
+        normalizedValue,
+        ...current.filter(
+          (savedValue) =>
+            savedValue.toLocaleLowerCase("ko-KR") !== comparisonValue,
+        ),
+      ].slice(0, KEYWORD_HISTORY_LIMIT);
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const selectKeywordHistory = (
+    kind: "include" | "exclude" | "demandAgency",
+    value: string,
+  ) => {
+    const snapshot = currentSearchSnapshot();
+    if (kind === "include") {
+      setIncludeKeyword(value);
+      scheduleDetailSearch({ ...snapshot, includeKeyword: value }, 0);
+    } else if (kind === "exclude") {
+      setExcludeKeyword(value);
+      scheduleDetailSearch({ ...snapshot, excludeKeyword: value }, 0);
+    } else {
+      setDemandAgencyInput(value);
+      setAgencySuggestions([]);
+      setAgencySuggestionsHasMore(false);
+      setAgencySuggestionsOpen(false);
+      setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
+      scheduleDetailSearch({ ...snapshot, demandAgencyInput: value }, 0);
+    }
+    setKeywordHistoryOpen(null);
+  };
+
+  const deleteKeywordHistory = (
+    kind: "include" | "exclude" | "demandAgency",
+    value: string,
+  ) => {
+    const storageKey = kind === "include"
+      ? INCLUDE_KEYWORD_HISTORY_KEY
+      : kind === "exclude"
+      ? EXCLUDE_KEYWORD_HISTORY_KEY
+      : DEMAND_AGENCY_HISTORY_KEY;
+    const setHistory = kind === "include"
+      ? setIncludeKeywordHistory
+      : kind === "exclude"
+      ? setExcludeKeywordHistory
+      : setDemandAgencyHistory;
+    setHistory((current) => {
+      const next = current.filter((savedValue) => savedValue !== value);
+      if (next.length > 0) {
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+      } else {
+        window.localStorage.removeItem(storageKey);
+      }
+      return next;
+    });
+  };
+
   const scheduleDetailSearch = (snapshot: SearchSnapshot, delay: number) => {
     const detailSnapshot = { ...snapshot };
     prepareSemanticAnalysisState(detailSnapshot.semanticQuery);
     cancelScheduledSearch();
     autoSearchTimerRef.current = window.setTimeout(() => {
       autoSearchTimerRef.current = null;
+      rememberKeywordHistory("include", detailSnapshot.includeKeyword);
+      rememberKeywordHistory("exclude", detailSnapshot.excludeKeyword);
+      rememberKeywordHistory("demandAgency", detailSnapshot.demandAgencyInput);
       void runSearch(detailSnapshot, 1);
     }, delay);
   };
@@ -1464,6 +1721,10 @@ export default function Home() {
     setMaxBudget(snapshot.maxBudget);
     setIncludeKeyword(snapshot.includeKeyword);
     setExcludeKeyword(snapshot.excludeKeyword);
+    setDemandAgencyInput(snapshot.demandAgencyInput);
+    setAgencySuggestions([]);
+    setAgencySuggestionsHasMore(false);
+    setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
     prepareSemanticAnalysisState(snapshot.semanticQuery);
     setOnlyEligible(snapshot.onlyEligible);
     setClosingSoon(snapshot.closingSoon);
@@ -1885,7 +2146,7 @@ export default function Home() {
                   </svg>
                 </span>
                 <span className="search-button-label">
-                  {searched ? "AI로 검색" : "분석 중…"}
+                  {isSearching ? "분석 중…" : "AI로 검색"}
                 </span>
               </button>
             </div>
@@ -1968,6 +2229,43 @@ export default function Home() {
               <h2>검색 상세 조건</h2>
             </div>
             <button
+              className="title-reset-button"
+              type="button"
+              onClick={() => {
+                const resetSnapshot = {
+                  ...currentSearchSnapshot(),
+                  category: "전체" as const,
+                  region: "전체 지역",
+                  maxBudget: 0,
+                  includeKeyword: "",
+                  excludeKeyword: "",
+                  demandAgencyInput: "",
+                  onlyEligible: false,
+                  closingSoon: false,
+                  closingWithinDays: null,
+                  sortMode: null,
+                };
+                setCategory("전체");
+                setRegion("전체 지역");
+                setMaxBudget(0);
+                setIncludeKeyword("");
+                setExcludeKeyword("");
+                setDemandAgencyInput("");
+                setAgencySuggestions([]);
+                setAgencySuggestionsHasMore(false);
+                setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
+                prepareSemanticAnalysisState(resetSnapshot.semanticQuery);
+                setOnlyEligible(false);
+                setClosingSoon(false);
+                setClosingWithinDays(null);
+                setSearchSortMode(null);
+                runSearchNow(resetSnapshot);
+              }}
+            >
+              <span aria-hidden="true">↻</span>
+              조건 초기화
+            </button>
+            <button
               type="button"
               onClick={() => setFiltersOpen(false)}
               aria-label="필터 닫기"
@@ -2042,46 +2340,298 @@ export default function Home() {
           </div>
 
           {/* Include Keywords */}
-          <div className="filter-group">
+          <div className="filter-group include-keyword-group">
             <label htmlFor="include">포함 키워드</label>
             <div className="input-with-icon">
               <span aria-hidden="true">＋</span>
               <input
+                ref={includeKeywordInputRef}
                 id="include"
                 value={includeKeyword}
+                title={includeKeywordOverflowing ? includeKeyword : undefined}
+                onFocus={() => {
+                  if (!includeKeyword.trim()) setKeywordHistoryOpen("include");
+                }}
+                onClick={() => {
+                  if (!includeKeyword.trim()) setKeywordHistoryOpen("include");
+                }}
+                onBlur={() => window.setTimeout(() => setKeywordHistoryOpen(null), 120)}
                 onChange={(event) => {
                   const nextKeyword = event.target.value;
                   setIncludeKeyword(nextKeyword);
+                  setKeywordHistoryOpen(nextKeyword.trim() ? null : "include");
                   scheduleDetailSearch(
                     { ...currentSearchSnapshot(), includeKeyword: nextKeyword },
                     500,
                   );
                 }}
+                autoComplete="off"
                 placeholder="AI, 웹서비스, 플랫폼"
               />
             </div>
-            <small>쉼표로 여러 키워드를 구분할 수 있습니다.</small>
+            {keywordHistoryOpen === "include"
+              && !includeKeyword.trim()
+              && includeKeywordHistory.length > 0 && (
+              <div className="keyword-history-list" role="listbox" aria-label="최근 포함키워드">
+                {includeKeywordHistory.map((value) => (
+                  <div className="keyword-history-item" key={value}>
+                    <button
+                      className="keyword-history-select"
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      title={value}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectKeywordHistory("include", value)}
+                    >
+                      {value}
+                    </button>
+                    <button
+                      className="keyword-history-delete"
+                      type="button"
+                      aria-label={`${value} 포함키워드 이력 삭제`}
+                      title="삭제"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => deleteKeywordHistory("include", value)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Exclude Keywords */}
-          <div className="filter-group">
+          <div className="filter-group exclude-keyword-group">
             <label htmlFor="exclude">제외 키워드</label>
             <div className="input-with-icon danger">
               <span aria-hidden="true">－</span>
               <input
+                ref={excludeKeywordInputRef}
                 id="exclude"
                 value={excludeKeyword}
+                title={excludeKeywordOverflowing ? excludeKeyword : undefined}
+                onFocus={() => {
+                  if (!excludeKeyword.trim()) setKeywordHistoryOpen("exclude");
+                }}
+                onClick={() => {
+                  if (!excludeKeyword.trim()) setKeywordHistoryOpen("exclude");
+                }}
+                onBlur={() => window.setTimeout(() => setKeywordHistoryOpen(null), 120)}
                 onChange={(event) => {
                   const nextKeyword = event.target.value;
                   setExcludeKeyword(nextKeyword);
+                  setKeywordHistoryOpen(nextKeyword.trim() ? null : "exclude");
                   scheduleDetailSearch(
                     { ...currentSearchSnapshot(), excludeKeyword: nextKeyword },
                     500,
                   );
                 }}
+                autoComplete="off"
                 placeholder="장비 납품, 인력파견"
               />
             </div>
+            {keywordHistoryOpen === "exclude"
+              && !excludeKeyword.trim()
+              && excludeKeywordHistory.length > 0 && (
+              <div className="keyword-history-list" role="listbox" aria-label="최근 제외키워드">
+                {excludeKeywordHistory.map((value) => (
+                  <div className="keyword-history-item" key={value}>
+                    <button
+                      className="keyword-history-select"
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      title={value}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectKeywordHistory("exclude", value)}
+                    >
+                      {value}
+                    </button>
+                    <button
+                      className="keyword-history-delete"
+                      type="button"
+                      aria-label={`${value} 제외키워드 이력 삭제`}
+                      title="삭제"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => deleteKeywordHistory("exclude", value)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Demand Agencies */}
+          <div className="filter-group agency-autocomplete">
+            <label htmlFor="demand-agency">수요기관</label>
+            <div className="input-with-icon">
+              <span aria-hidden="true">⌂</span>
+              <input
+                ref={demandAgencyInputRef}
+                id="demand-agency"
+                value={demandAgencyInput}
+                title={demandAgencyInputOverflowing ? demandAgencyInput : undefined}
+                onFocus={() => {
+                  setAgencySuggestionsOpen(true);
+                  if (!demandAgencyInput.trim()) {
+                    setKeywordHistoryOpen("demandAgency");
+                  }
+                }}
+                onClick={() => {
+                  if (!demandAgencyInput.trim()) {
+                    setKeywordHistoryOpen("demandAgency");
+                  }
+                }}
+                onBlur={() => window.setTimeout(() => {
+                  setAgencySuggestionsOpen(false);
+                  setKeywordHistoryOpen(null);
+                }, 120)}
+                onChange={(event) => {
+                  const nextAgencyInput = event.target.value;
+                  setDemandAgencyInput(nextAgencyInput);
+                  setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
+                  setAgencySuggestionsOpen(true);
+                  setKeywordHistoryOpen(
+                    nextAgencyInput.trim() ? null : "demandAgency",
+                  );
+                  scheduleDetailSearch(
+                    { ...currentSearchSnapshot(), demandAgencyInput: nextAgencyInput },
+                    500,
+                  );
+                }}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={agencySuggestionsOpen && agencySuggestions.length > 0}
+                aria-controls="demand-agency-suggestions"
+                autoComplete="off"
+                placeholder="조달청, 한국소비자원"
+              />
+            </div>
+            {keywordHistoryOpen === "demandAgency"
+              && !demandAgencyInput.trim()
+              && demandAgencyHistory.length > 0 && (
+              <div className="keyword-history-list" role="listbox" aria-label="최근 수요기관">
+                {demandAgencyHistory.map((value) => (
+                  <div className="keyword-history-item" key={value}>
+                    <button
+                      className="keyword-history-select"
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      title={value}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectKeywordHistory("demandAgency", value)}
+                    >
+                      {value}
+                    </button>
+                    <button
+                      className="keyword-history-delete"
+                      type="button"
+                      aria-label={`${value} 수요기관 이력 삭제`}
+                      title="삭제"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => deleteKeywordHistory("demandAgency", value)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {agencySuggestionsOpen
+              && activeDemandAgencyFragment(demandAgencyInput).length >= 2 && (
+              <div
+                id="demand-agency-suggestions"
+                className="agency-suggestion-list"
+                role="listbox"
+                aria-label="최상위기관 검색 결과"
+              >
+                {agencySuggestions.map((suggestion) => (
+                  <button
+                    key={`${suggestion.agencyCode}-${suggestion.agencyName}`}
+                    type="button"
+                    role="option"
+                    aria-selected="false"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      const nextAgencyInput = replaceDemandAgencyFragment(
+                        demandAgencyInput,
+                        suggestion.agencyName,
+                      );
+                      setDemandAgencyInput(nextAgencyInput);
+                      setAgencySuggestions([]);
+                      setAgencySuggestionsHasMore(false);
+                      setAgencySuggestionsOpen(false);
+                      setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
+                      scheduleDetailSearch(
+                        { ...currentSearchSnapshot(), demandAgencyInput: nextAgencyInput },
+                        0,
+                      );
+                    }}
+                  >
+                    <strong>{suggestion.agencyName}</strong>
+                    <small>
+                      공고 {suggestion.bidCount.toLocaleString()}건
+                    </small>
+                  </button>
+                ))}
+                {agencySuggestionsHasMore
+                  && agencySuggestionLimit < AGENCY_SUGGESTION_MAX && (
+                  <button
+                    className="agency-suggestion-more"
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setAgencySuggestionLimit((current) => Math.min(
+                        current + AGENCY_SUGGESTION_PAGE_SIZE,
+                        AGENCY_SUGGESTION_MAX,
+                      ));
+                    }}
+                  >
+                    <strong>더 보기</strong>
+                    <small>20개 추가</small>
+                  </button>
+                )}
+                {!agencySuggestions.some(
+                  (suggestion) => suggestion.agencyName
+                    === activeDemandAgencyFragment(demandAgencyInput),
+                ) && (
+                  <button
+                    className="agency-suggestion-direct"
+                    type="button"
+                    role="option"
+                    aria-selected="false"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      const directAgencyName = activeDemandAgencyFragment(
+                        demandAgencyInput,
+                      );
+                      const nextAgencyInput = replaceDemandAgencyFragment(
+                        demandAgencyInput,
+                        directAgencyName,
+                      );
+                      setDemandAgencyInput(nextAgencyInput);
+                      setAgencySuggestions([]);
+                      setAgencySuggestionsHasMore(false);
+                      setAgencySuggestionsOpen(false);
+                      setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
+                      scheduleDetailSearch(
+                        { ...currentSearchSnapshot(), demandAgencyInput: nextAgencyInput },
+                        0,
+                      );
+                    }}
+                  >
+                    <strong>
+                      ‘{activeDemandAgencyFragment(demandAgencyInput)}’ 입력
+                    </strong>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Toggles */}
@@ -2129,38 +2679,6 @@ export default function Home() {
           </button>
           */}
           <button
-            className="reset-button"
-            type="button"
-            onClick={() => {
-              const resetSnapshot = {
-                ...currentSearchSnapshot(),
-                category: "전체" as const,
-                region: "전체 지역",
-                maxBudget: 0,
-                includeKeyword: "",
-                excludeKeyword: "",
-                onlyEligible: false,
-                closingSoon: false,
-                closingWithinDays: null,
-                sortMode: null,
-              };
-              setCategory("전체");
-              setRegion("전체 지역");
-              setMaxBudget(0);
-              setIncludeKeyword("");
-              setExcludeKeyword("");
-              prepareSemanticAnalysisState(resetSnapshot.semanticQuery);
-              setOnlyEligible(false);
-              setClosingSoon(false);
-              setClosingWithinDays(null);
-              setSearchSortMode(null);
-              runSearchNow(resetSnapshot);
-            }}
-          >
-            <span aria-hidden="true">×</span>
-            조건 초기화
-          </button>
-          <button
             className="apply-button"
             type="button"
             onClick={openSaveSearch}
@@ -2175,7 +2693,7 @@ export default function Home() {
                 <Mark>{companyProfileInitials(companyProfile.name)}</Mark>
                 <span>
                   <strong>기업 프로필</strong>
-                  <small>매칭 정확도를 높여보세요</small>
+                  <small>정확도를 높여보세요</small>
                 </span>
               </div>
               <strong>{companyProfile.completion}%</strong>
@@ -2306,7 +2824,10 @@ export default function Home() {
           </div>
 
           {/* Bid List */}
-          <div className={`result-list ${searched ? "" : "is-loading"}`}>
+          <div
+            className={`result-list ${isSearching ? "is-loading" : ""}`}
+            aria-busy={isSearching}
+          >
             {!searched ? (
               <div className="empty-state" role="status">
                 <span>⌕</span>
@@ -3156,6 +3677,9 @@ export default function Home() {
                           <span className="exclude">
                             제외: {savedSearch.filters.excludeKeyword}
                           </span>
+                        )}
+                        {savedSearch.filters.demandAgencyInput.trim() && (
+                          <span>수요기관: {savedSearch.filters.demandAgencyInput}</span>
                         )}
                         {savedSearch.filters.onlyEligible && (
                           <span>참가 가능만</span>

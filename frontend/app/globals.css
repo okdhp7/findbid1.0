@@ -1078,7 +1078,8 @@ html[data-findbid-theme="light"] .app-shell {
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 104px);
+  height: auto;
+  max-height: none;
   overflow: hidden;
   padding: 22px;
   position: sticky;
@@ -1086,20 +1087,15 @@ html[data-findbid-theme="light"] .app-shell {
 }
 
 .app-shell .filters .filter-scroll {
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-  scrollbar-color: rgba(79, 142, 247, 0.36) transparent;
-  scrollbar-width: thin;
+  -ms-overflow-style: none;
+  min-height: auto;
+  overflow-y: visible;
+  padding-right: 0;
+  scrollbar-width: none;
 }
 
 .app-shell .filters .filter-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-
-.app-shell .filters .filter-scroll::-webkit-scrollbar-thumb {
-  background: rgba(79, 142, 247, 0.36);
-  border-radius: 999px;
+  display: none;
 }
 
 .app-shell .filter-backdrop {
@@ -1107,7 +1103,7 @@ html[data-findbid-theme="light"] .app-shell {
 }
 
 .app-shell .aside-title {
-  align-items: flex-start;
+  align-items: flex-end;
   display: flex;
   justify-content: space-between;
   padding-bottom: 4px;
@@ -1125,6 +1121,28 @@ html[data-findbid-theme="light"] .app-shell {
   width: 32px;
 }
 
+.app-shell .aside-title .title-reset-button {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  height: 28px;
+  margin: 0 0 -3px auto;
+  padding: 0 8px;
+  transition: var(--transition);
+  white-space: nowrap;
+  width: auto;
+}
+
+.app-shell .aside-title .title-reset-button:hover {
+  border-color: var(--accent);
+  color: var(--text-soft);
+}
+
 .app-shell .aside-title h2 {
   color: var(--text);
   font-size: 17px;
@@ -1137,6 +1155,12 @@ html[data-findbid-theme="light"] .app-shell {
   border-top: 1px solid var(--border);
   margin-top: 18px;
   padding-top: 16px;
+}
+
+.app-shell .exclude-keyword-group {
+  border-top: 0;
+  margin-top: 12px;
+  padding-top: 8px;
 }
 
 .app-shell .filter-group label {
@@ -1341,29 +1365,6 @@ html[data-findbid-theme="light"] .app-shell {
   box-shadow: 0 10px 26px var(--accent-glow);
   filter: brightness(1.1);
   transform: translateY(-1px);
-}
-
-.app-shell .reset-button {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: var(--muted);
-  display: inline-flex;
-  font-size: 13px;
-  gap: 4px;
-  justify-content: center;
-  margin-top: 20px;
-  padding: 8px 0;
-  transition: color 0.15s;
-  width: 100%;
-}
-
-.app-shell .reset-button + .apply-button {
-  margin-top: 10px;
-}
-
-.app-shell .reset-button:hover {
-  color: var(--text-soft);
 }
 
 /* Profile Health Card */
@@ -3170,8 +3171,9 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
 }
 
 .app-shell .result-list.is-loading {
-  opacity: 0.3;
-  transform: translateY(6px);
+  opacity: 0.55;
+  pointer-events: none;
+  transform: none;
 }
 
 /* ── Bid Card ── */
@@ -5004,6 +5006,147 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
   display: grid;
   gap: 7px;
   grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.app-shell .agency-autocomplete {
+  position: relative;
+}
+
+.app-shell .include-keyword-group,
+.app-shell .exclude-keyword-group {
+  position: relative;
+}
+
+.app-shell .keyword-history-list {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 20%);
+  left: 0;
+  max-height: 190px;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 25;
+}
+
+.app-shell .keyword-history-item {
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  min-width: 0;
+}
+
+.app-shell .keyword-history-item:last-child {
+  border-bottom: 0;
+}
+
+.app-shell .keyword-history-list button {
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.app-shell .keyword-history-select {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 9px 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .keyword-history-delete {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 26px;
+  font-size: 12px !important;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+
+.app-shell .keyword-history-list button:hover,
+.app-shell .keyword-history-list button:focus-visible {
+  background: var(--panel-soft);
+  outline: none;
+}
+
+.app-shell .keyword-history-delete:hover,
+.app-shell .keyword-history-delete:focus-visible {
+  color: var(--danger);
+}
+
+.app-shell .agency-suggestion-list {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 20%);
+  left: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.app-shell .agency-suggestion-list button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-soft);
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.app-shell .agency-suggestion-list button strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-shell .agency-suggestion-list button:last-child {
+  border-bottom: 0;
+}
+
+.app-shell .agency-suggestion-list button:hover,
+.app-shell .agency-suggestion-list button:focus-visible {
+  background: var(--panel-soft);
+  outline: none;
+}
+
+.app-shell .agency-suggestion-list .agency-suggestion-direct {
+  align-items: center;
+  background: var(--panel-soft);
+  color: var(--accent-light);
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  text-align: center;
+}
+
+.app-shell .agency-suggestion-list .agency-suggestion-more {
+  background: var(--panel-soft);
+  color: var(--accent-light);
+  justify-content: center;
+}
+
+.app-shell .agency-suggestion-list small {
+  flex: 0 0 auto;
+  font-size: 10px;
+  margin: 0;
 }
 
 .app-shell .profile-region-options button,

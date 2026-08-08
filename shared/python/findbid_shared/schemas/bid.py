@@ -84,6 +84,7 @@ class SearchRequest(CamelModel):
     max_budget: int | None = None
     include_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(default_factory=list)
+    demand_agencies: list[str] = Field(default_factory=list, max_length=20)
     only_eligible: bool = False
     eligibility_mode: Literal["not_eligible"] | None = None
     closing_within_days: int | None = None

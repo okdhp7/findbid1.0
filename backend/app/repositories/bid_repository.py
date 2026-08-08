@@ -4,6 +4,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.bid import BidNotice
+from app.agency_types import normalize_agency_name, resolve_demand_agency_filters
 from findbid_shared.schemas import BidRecord, SearchRequest
 
 
@@ -67,10 +68,23 @@ class BidRepository:
         models = self.session.scalars(statement).all()
         includes = [word.strip().lower() for word in request.include_keywords if word.strip()]
         excludes = [word.strip().lower() for word in request.exclude_keywords if word.strip()]
+        child_agency_names, direct_agencies = resolve_demand_agency_filters(
+            request.demand_agencies
+        )
+        child_agency_name_set = set(child_agency_names)
         results: list[BidRecord] = []
 
         for model in models:
             record = self.to_record(model)
+            normalized_demand_agency = normalize_agency_name(record.demand_agency)
+            if request.demand_agencies and not (
+                normalized_demand_agency in child_agency_name_set
+                or any(
+                    agency in normalized_demand_agency
+                    for agency in direct_agencies
+                )
+            ):
+                continue
             corpus = " ".join(
                 [record.title, record.summary, *record.tags, *record.matched]
             ).lower()

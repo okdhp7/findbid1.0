@@ -138,6 +138,37 @@ def test_required_semantic_terms_are_applied_before_vector_ranking() -> None:
     assert params["semantic_must_0_0"] == "%토목구조물%"
 
 
+def test_detail_demand_agencies_expand_top_level_and_keep_direct_input(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.repositories.external_bid_repository.resolve_demand_agency_filters",
+        lambda _values: (["경기도교육청치동고등학교"], ["한국소비자원"]),
+    )
+    repository = object.__new__(ExternalBidRepository)
+
+    conditions, params, _ = repository._search_parts(
+        SearchRequest(demand_agencies=["경기도교육청", "한국소비자원"])
+    )
+
+    detail_condition = next(
+        condition for condition in conditions if "detail_child_agencies" in condition
+    )
+    assert "regexp_replace(coalesce(b.agency_name, '')" in detail_condition
+    assert "= ANY(:detail_child_agencies)" in detail_condition
+    assert "LIKE :detail_demand_agency_0" in detail_condition
+    assert params["detail_child_agencies"] == ["경기도교육청치동고등학교"]
+    assert params["detail_demand_agency_0"] == "%한국소비자원%"
+
+
+def test_search_request_accepts_camel_case_demand_agencies() -> None:
+    request = SearchRequest.model_validate(
+        {"demandAgencies": ["조달청", "한국소비자원"]}
+    )
+
+    assert request.demand_agencies == ["조달청", "한국소비자원"]
+
+
 def test_exact_required_match_survives_semantic_score_threshold() -> None:
     intent = parse_semantic_intent("토목구조물 보수공사")
     rows = [

@@ -89,6 +89,11 @@ class SearchService:
                 "수요기관 필터: "
                 + "·".join(analysis.demand_agencies)
             )
+        if request.demand_agencies:
+            trace.append(
+                "수요기관 상세조건: "
+                + "·".join(request.demand_agencies)
+            )
         if analysis.contract_methods:
             trace.append(
                 "계약방법 필터: "
@@ -293,7 +298,8 @@ class SearchService:
                         if analysis.closing_within_days is not None
                         else request.closing_within_days
                     ),
-                    "demandAgencies": analysis.demand_agencies,
+                    "demandAgencies": request.demand_agencies,
+                    "semanticDemandAgencies": analysis.demand_agencies,
                     "contractMethods": analysis.contract_methods,
                 },
                 keywords={

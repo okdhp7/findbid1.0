@@ -12,7 +12,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.agency_types import normalize_agency_name, resolve_agency_types
+from app.agency_types import (
+    normalize_agency_name,
+    resolve_agency_types,
+    resolve_demand_agency_filters,
+)
 from app.database import SessionLocal
 from app.eligibility.rules import COMPANY_PROFILE
 from app.knowledge import analyze_query
@@ -885,6 +889,29 @@ class ExternalBidRepository:
                 )
                 params[name] = f"%{agency.lower()}%"
             conditions.append(f"({' OR '.join(agency_conditions)})")
+
+        if request.demand_agencies:
+            child_agency_names, direct_agencies = resolve_demand_agency_filters(
+                request.demand_agencies
+            )
+            normalized_bid_agency = (
+                "lower(regexp_replace(coalesce(b.agency_name, ''), "
+                "'[[:space:]·ㆍ・]+', '', 'g'))"
+            )
+            detail_agency_conditions: list[str] = []
+            if child_agency_names:
+                detail_agency_conditions.append(
+                    f"{normalized_bid_agency} = ANY(:detail_child_agencies)"
+                )
+                params["detail_child_agencies"] = child_agency_names
+            for index, agency in enumerate(direct_agencies):
+                name = f"detail_demand_agency_{index}"
+                detail_agency_conditions.append(
+                    f"{normalized_bid_agency} LIKE :{name}"
+                )
+                params[name] = f"%{agency}%"
+            if detail_agency_conditions:
+                conditions.append(f"({' OR '.join(detail_agency_conditions)})")
 
         if analysis.contract_methods:
             contract_conditions: list[str] = []

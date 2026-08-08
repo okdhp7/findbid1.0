@@ -98,6 +98,9 @@ test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검
   assert.match(page, /scheduleDetailSearch\(/);
   assert.match(page, /const detailSnapshot = \{ \.\.\.snapshot \}/);
   assert.match(page, /prepareSemanticAnalysisState\(detailSnapshot\.semanticQuery\);[\s\S]*?runSearch\(detailSnapshot, 1\)/);
+  assert.match(page, /const \[isSearching, setIsSearching\] = useState\(false\)/);
+  assert.match(page, /className=\{`result-list \$\{isSearching \? "is-loading" : ""\}`\}/);
+  assert.match(page, /aria-busy=\{isSearching\}/);
   const prepareAnalysisBody = page.match(
     /const prepareSemanticAnalysisState = \(nextSemanticQuery: string\) => \{([\s\S]*?)\n  \};/,
   )?.[1] ?? "";
@@ -114,8 +117,9 @@ test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검
   assert.match(page, /\/\*[\s\S]*?조건 적용하기[\s\S]*?\*\//);
   assert.match(
     page,
-    /className="reset-button"[\s\S]*?<span aria-hidden="true">×<\/span>[\s\S]*?조건 초기화[\s\S]*?className="apply-button"[\s\S]*?검색조건 저장\/선택/,
+    /className="title-reset-button"[\s\S]*?<span aria-hidden="true">↻<\/span>[\s\S]*?조건 초기화/,
   );
+  assert.match(page, /className="apply-button"[\s\S]*?검색조건 저장\/선택/);
   assert.match(
     page,
     /className="semantic-input-clear"[\s\S]*?<span aria-hidden="true">×<\/span>[\s\S]*?입력 지우기/,
@@ -448,6 +452,42 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
   assert.match(page, /className="profile-agency-type-options"/);
   assert.match(page, /className="profile-agency-type-tooltip"/);
   assert.match(page, /fetch\("\/api\/company\/agency-types"/);
+  assert.match(page, /fetch\(\s*`\/api\/company\/agency-suggestions\?q=/);
+  assert.match(page, /agency-suggestions\?q=\$\{encodeURIComponent\(query\)\}&limit=\$\{agencySuggestionLimit\}/);
+  assert.match(page, /const AGENCY_SUGGESTION_PAGE_SIZE = 20/);
+  assert.match(page, /const AGENCY_SUGGESTION_MAX = 100/);
+  assert.match(page, /className="agency-suggestion-more"/);
+  assert.match(page, /agencySuggestionsHasMore/);
+  assert.match(page, /current \+ AGENCY_SUGGESTION_PAGE_SIZE,[\s\S]*?AGENCY_SUGGESTION_MAX/);
+  assert.match(page, /<strong>더 보기<\/strong>/);
+  assert.match(page, /suggestion\.agencyName/);
+  assert.match(page, /공고 \{suggestion\.bidCount\.toLocaleString\(\)\}건/);
+  assert.doesNotMatch(page, /하위기관 \$\{suggestion\.agencyCount/);
+  assert.doesNotMatch(page, /\$\{suggestion\.topLevelAgencyName\} 소속/);
+  assert.match(page, /className="agency-suggestion-direct"/);
+  assert.match(page, /‘\{activeDemandAgencyFragment\(demandAgencyInput\)\}’ 입력/);
+  assert.doesNotMatch(css, /\.app-shell \.agency-autocomplete \.input-with-icon input\s*\{[\s\S]*?font-size:\s*12px/);
+  assert.match(css, /\.app-shell \.agency-suggestion-list \.agency-suggestion-direct\s*\{[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;[\s\S]*?text-align:\s*center;/);
+  assert.match(page, /input\.scrollWidth > input\.clientWidth \+ 1/);
+  assert.match(page, /title=\{includeKeywordOverflowing \? includeKeyword : undefined\}/);
+  assert.match(page, /title=\{excludeKeywordOverflowing \? excludeKeyword : undefined\}/);
+  assert.match(page, /title=\{demandAgencyInputOverflowing \? demandAgencyInput : undefined\}/);
+  assert.match(page, /const KEYWORD_HISTORY_LIMIT = 5/);
+  assert.match(page, /className="keyword-history-list"/);
+  assert.match(page, /aria-label="최근 포함키워드"/);
+  assert.match(page, /aria-label="최근 제외키워드"/);
+  assert.match(page, /aria-label="최근 수요기관"/);
+  assert.match(page, /rememberKeywordHistory\("include", detailSnapshot\.includeKeyword\)/);
+  assert.match(page, /rememberKeywordHistory\("exclude", detailSnapshot\.excludeKeyword\)/);
+  assert.match(page, /rememberKeywordHistory\("demandAgency", detailSnapshot\.demandAgencyInput\)/);
+  assert.match(page, /value\.trim\(\)\.replace\(\/\[,，\]\+\$\/, ""\)\.trim\(\)/);
+  assert.match(page, /const deleteKeywordHistory = \(/);
+  assert.match(page, /className="keyword-history-delete"/);
+  assert.match(page, /deleteKeywordHistory\("include", value\)/);
+  assert.match(page, /deleteKeywordHistory\("exclude", value\)/);
+  assert.match(page, /deleteKeywordHistory\("demandAgency", value\)/);
+  assert.match(page, /demandAgencies: splitDemandAgencies\(snapshot\.demandAgencyInput\)/);
+  assert.match(page, /placeholder="조달청, 한국소비자원"/);
   assert.match(page, /const displayedAgencyNames = detail\.topLevelAgencyNames\.slice\(0, 2\)/);
   assert.match(page, /displayedAgencyNames\.join\(", "\)/);
   assert.match(page, /detail\.topLevelAgencyCount > displayedAgencyNames\.length \? ", \.\.\." : ""/);

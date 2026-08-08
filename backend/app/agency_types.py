@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
+from findbid_shared.config import get_settings
 
 
 AGENCY_TYPES = (
@@ -98,6 +99,253 @@ def list_agency_type_details(session: Session) -> list[dict[str, object]]:
 
 def normalize_agency_name(value: str) -> str:
     return re.sub(r"[\s·ㆍ・]+", "", str(value or "").strip()).lower()
+
+
+def suggest_top_level_agencies(
+    session: Session,
+    query: str,
+    limit: int = 10,
+    bid_session: Session | None = None,
+) -> list[dict[str, object]]:
+    normalized_query = normalize_agency_name(query)
+    if not normalized_query:
+        return []
+    safe_limit = max(1, min(limit, 101))
+    normalized_top_level = (
+        "lower(regexp_replace(coalesce(top_level_agency_name, ''), "
+        "'[[:space:]·ㆍ・]+', '', 'g'))"
+    )
+    normalized_agency = (
+        "lower(regexp_replace(coalesce(name, ''), "
+        "'[[:space:]·ㆍ・]+', '', 'g'))"
+    )
+    statement = text(
+        f"""
+        WITH matching_top_levels AS (
+            SELECT min(top_level_agency_code) AS agency_code,
+                   top_level_agency_name AS agency_name,
+                   min(top_level_agency_code) AS top_level_agency_code,
+                   top_level_agency_name,
+                   count(*) AS agency_count,
+                   true AS is_top_level
+            FROM demand_agencies
+            WHERE NOT deleted
+              AND top_level_agency_name <> ''
+              AND {normalized_top_level} LIKE :contains
+            GROUP BY top_level_agency_name
+        ), matching_agencies AS (
+            SELECT min(code) AS agency_code,
+                   name AS agency_name,
+                   min(top_level_agency_code) AS top_level_agency_code,
+                   min(top_level_agency_name) AS top_level_agency_name,
+                   0 AS agency_count,
+                   false AS is_top_level
+            FROM demand_agencies
+            WHERE NOT deleted
+              AND name <> ''
+              AND {normalized_agency} LIKE :contains
+              AND {normalized_agency} <> {normalized_top_level}
+            GROUP BY name
+        ), suggestions AS (
+            SELECT * FROM matching_top_levels
+            UNION ALL
+            SELECT * FROM matching_agencies
+        )
+        SELECT agency_code,
+               agency_name,
+               top_level_agency_code,
+               top_level_agency_name,
+               agency_count,
+               is_top_level
+        FROM suggestions
+        ORDER BY CASE
+                     WHEN lower(regexp_replace(agency_name, '[[:space:]·ㆍ・]+', '', 'g')) = :exact THEN 0
+                     WHEN lower(regexp_replace(agency_name, '[[:space:]·ㆍ・]+', '', 'g')) LIKE :prefix THEN 1
+                     ELSE 2
+                 END,
+                 is_top_level DESC,
+                 agency_name
+        LIMIT :limit
+        """
+    )
+    try:
+        rows = session.execute(
+            statement,
+            {
+                "contains": f"%{normalized_query}%",
+                "exact": normalized_query,
+                "prefix": f"{normalized_query}%",
+                "limit": safe_limit,
+            },
+        ).all()
+    except SQLAlchemyError:
+        return []
+    suggestions = [
+        {
+            "agencyCode": str(agency_code or ""),
+            "agencyName": str(agency_name),
+            "topLevelAgencyCode": str(top_level_agency_code or ""),
+            "topLevelAgencyName": str(top_level_agency_name or ""),
+            "agencyCount": int(agency_count),
+            "bidCount": 0,
+            "isTopLevel": bool(is_top_level),
+        }
+        for (
+            agency_code,
+            agency_name,
+            top_level_agency_code,
+            top_level_agency_name,
+            agency_count,
+            is_top_level,
+        ) in rows
+    ]
+    unique_suggestions: dict[str, dict[str, object]] = {}
+    for item in suggestions:
+        normalized_name = normalize_agency_name(str(item["agencyName"]))
+        existing = unique_suggestions.get(normalized_name)
+        if existing is None or (
+            bool(item["isTopLevel"]) and not bool(existing["isTopLevel"])
+        ):
+            unique_suggestions[normalized_name] = item
+    suggestions = list(unique_suggestions.values())
+
+    if bid_session is not None:
+        settings = get_settings()
+        schema = settings.bid_database_schema
+        table = settings.bid_database_table
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", schema) and re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*",
+            table,
+        ):
+            bid_statement = text(
+                f"""
+                SELECT agency_name, count(*) AS bid_count
+                FROM "{schema}"."{table}"
+                WHERE agency_name IS NOT NULL
+                  AND coalesce(status, 'open') = 'open'
+                  AND (deadline IS NULL OR deadline >= now())
+                  AND lower(regexp_replace(agency_name, '[[:space:]·ㆍ・]+', '', 'g'))
+                      LIKE :contains
+                GROUP BY agency_name
+                ORDER BY CASE
+                             WHEN lower(regexp_replace(agency_name, '[[:space:]·ㆍ・]+', '', 'g')) = :exact THEN 0
+                             WHEN lower(regexp_replace(agency_name, '[[:space:]·ㆍ・]+', '', 'g')) LIKE :prefix THEN 1
+                             ELSE 2
+                         END,
+                         bid_count DESC,
+                         agency_name
+                LIMIT :candidate_limit
+                """
+            )
+            try:
+                bid_rows = bid_session.execute(
+                    bid_statement,
+                    {
+                        "contains": f"%{normalized_query}%",
+                        "exact": normalized_query,
+                        "prefix": f"{normalized_query}%",
+                        "candidate_limit": max(20, safe_limit * 3),
+                    },
+                ).all()
+            except SQLAlchemyError:
+                bid_rows = []
+
+            by_name = {
+                normalize_agency_name(str(item["agencyName"])): item
+                for item in suggestions
+            }
+            for agency_name, bid_count in bid_rows:
+                agency_name_text = str(agency_name or "").strip()
+                normalized_name = normalize_agency_name(agency_name_text)
+                if not normalized_name:
+                    continue
+                existing = by_name.get(normalized_name)
+                if existing is not None:
+                    existing["bidCount"] = int(bid_count)
+                    continue
+                item: dict[str, object] = {
+                    "agencyCode": "",
+                    "agencyName": agency_name_text,
+                    "topLevelAgencyCode": "",
+                    "topLevelAgencyName": "",
+                    "agencyCount": 0,
+                    "bidCount": int(bid_count),
+                    "isTopLevel": False,
+                }
+                suggestions.append(item)
+                by_name[normalized_name] = item
+
+    def suggestion_rank(item: dict[str, object]) -> tuple[int, int, int, str]:
+        normalized_name = normalize_agency_name(str(item["agencyName"]))
+        match_rank = (
+            0
+            if normalized_name == normalized_query
+            else 1
+            if normalized_name.startswith(normalized_query)
+            else 2
+        )
+        return (
+            match_rank,
+            0 if bool(item["isTopLevel"]) and match_rank == 0 else 1,
+            -int(item["bidCount"]),
+            str(item["agencyName"]),
+        )
+
+    return sorted(suggestions, key=suggestion_rank)[:safe_limit]
+
+
+def resolve_demand_agency_filters(
+    values: Iterable[str],
+) -> tuple[list[str], list[str]]:
+    normalized_inputs = list(
+        dict.fromkeys(
+            normalize_agency_name(value)
+            for value in values
+            if normalize_agency_name(value)
+        )
+    )
+    if not normalized_inputs:
+        return [], []
+
+    normalized_top_level = (
+        "lower(regexp_replace(coalesce(top_level_agency_name, ''), "
+        "'[[:space:]·ㆍ・]+', '', 'g'))"
+    )
+    statement = text(
+        f"""
+        SELECT DISTINCT normalized_name, {normalized_top_level} AS normalized_top_level
+        FROM demand_agencies
+        WHERE NOT deleted
+          AND {normalized_top_level} IN :normalized_inputs
+          AND normalized_name <> ''
+        """
+    ).bindparams(bindparam("normalized_inputs", expanding=True))
+    try:
+        with SessionLocal() as session:
+            rows = session.execute(
+                statement,
+                {"normalized_inputs": normalized_inputs},
+            ).all()
+    except SQLAlchemyError:
+        return [], normalized_inputs
+
+    matched_top_levels = {str(row[1]) for row in rows}
+    child_agency_names = list(
+        dict.fromkeys(
+            [
+                *(
+                    value
+                    for value in normalized_inputs
+                    if value in matched_top_levels
+                ),
+                *(str(row[0]) for row in rows if str(row[0]).strip()),
+            ]
+        )
+    )
+    direct_inputs = [
+        value for value in normalized_inputs if value not in matched_top_levels
+    ]
+    return child_agency_names, direct_inputs
 
 
 def _fallback_agency_type(name: str) -> str:
