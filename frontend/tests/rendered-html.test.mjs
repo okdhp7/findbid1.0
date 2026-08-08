@@ -448,9 +448,9 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
   assert.match(page, /className="profile-agency-type-options"/);
   assert.match(page, /className="profile-agency-type-tooltip"/);
   assert.match(page, /fetch\("\/api\/company\/agency-types"/);
-  assert.match(page, /const displayedAgencyNames = detail\.agencyNames\.slice\(0, 2\)/);
+  assert.match(page, /const displayedAgencyNames = detail\.topLevelAgencyNames\.slice\(0, 2\)/);
   assert.match(page, /displayedAgencyNames\.join\(", "\)/);
-  assert.match(page, /detail\.agencyCount > displayedAgencyNames\.length \? ", \.\.\." : ""/);
+  assert.match(page, /detail\.topLevelAgencyCount > displayedAgencyNames\.length \? ", \.\.\." : ""/);
   assert.match(page, /aria-label=\{`\$\{option\.name\} 세부 기관 목록`\}/);
   assert.match(page, /tabIndex=\{0\}/);
   assert.match(page, /role="tooltip"/);

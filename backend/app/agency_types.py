@@ -27,27 +27,37 @@ AGENCY_TYPES = (
 def list_agency_type_details(session: Session) -> list[dict[str, object]]:
     statement = text(
         """
-        WITH distinct_agencies AS (
-            SELECT DISTINCT jurisdiction_type, detail_type_large, name
+        WITH distinct_top_level_agencies AS (
+            SELECT DISTINCT
+                   jurisdiction_type,
+                   detail_type_large,
+                   coalesce(
+                       nullif(trim(top_level_agency_name), ''),
+                       '최상위기관 미등록'
+                   ) AS top_level_agency_name
             FROM demand_agencies
             WHERE NOT deleted
               AND jurisdiction_type <> ''
               AND detail_type_large <> ''
-              AND name <> ''
         ), ranked_agencies AS (
             SELECT jurisdiction_type,
                    detail_type_large,
-                   name,
+                   top_level_agency_name,
                    count(*) OVER (
                        PARTITION BY jurisdiction_type, detail_type_large
-                   ) AS agency_count,
+                   ) AS top_level_agency_count,
                    row_number() OVER (
                        PARTITION BY jurisdiction_type, detail_type_large
-                       ORDER BY name
+                       ORDER BY
+                           (top_level_agency_name = '최상위기관 미등록'),
+                           top_level_agency_name
                    ) AS sample_rank
-            FROM distinct_agencies
+            FROM distinct_top_level_agencies
         )
-        SELECT jurisdiction_type, detail_type_large, name, agency_count
+        SELECT jurisdiction_type,
+               detail_type_large,
+               top_level_agency_name,
+               top_level_agency_count
         FROM ranked_agencies
         WHERE sample_rank <= 2
         ORDER BY jurisdiction_type, detail_type_large, sample_rank
@@ -59,7 +69,7 @@ def list_agency_type_details(session: Session) -> list[dict[str, object]]:
         return []
 
     grouped: dict[str, dict[str, dict[str, object]]] = {}
-    for agency_type, detail_name, agency_name, agency_count in rows:
+    for agency_type, detail_name, top_level_agency_name, top_level_agency_count in rows:
         agency_type_text = str(agency_type)
         if agency_type_text not in AGENCY_TYPES:
             continue
@@ -68,13 +78,13 @@ def list_agency_type_details(session: Session) -> list[dict[str, object]]:
             str(detail_name),
             {
                 "name": str(detail_name),
-                "agencyNames": [],
-                "agencyCount": int(agency_count),
+                "topLevelAgencyNames": [],
+                "topLevelAgencyCount": int(top_level_agency_count),
             },
         )
-        agency_names = detail["agencyNames"]
-        if isinstance(agency_names, list) and len(agency_names) < 2:
-            agency_names.append(str(agency_name))
+        top_level_agency_names = detail["topLevelAgencyNames"]
+        if isinstance(top_level_agency_names, list) and len(top_level_agency_names) < 2:
+            top_level_agency_names.append(str(top_level_agency_name))
 
     return [
         {

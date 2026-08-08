@@ -34,8 +34,8 @@ const regions = [
 ];
 type AgencyTypeDetail = {
   name: string;
-  agencyNames: string[];
-  agencyCount: number;
+  topLevelAgencyNames: string[];
+  topLevelAgencyCount: number;
 };
 
 type AgencyTypeOption = {
@@ -88,8 +88,8 @@ const agencyTypeOptions: AgencyTypeOption[] = [
   name: option.name,
   details: option.details.map((detail) => ({
     name: detail,
-    agencyNames: [],
-    agencyCount: 0,
+    topLevelAgencyNames: [],
+    topLevelAgencyCount: 0,
   })),
 }));
 const agencyTypeNames = agencyTypeOptions.map((option) => option.name);
@@ -3374,8 +3374,8 @@ export default function Home() {
                       name: "전체 기관",
                       details: [{
                         name: "나라장터에 등록된 모든 기관종류",
-                        agencyNames: [],
-                        agencyCount: 0,
+                        topLevelAgencyNames: [],
+                        topLevelAgencyCount: 0,
                       }],
                     },
                     ...agencyTypeDetails,
@@ -3404,14 +3404,14 @@ export default function Home() {
                             tabIndex={0}
                           >
                             {option.details.map((detail) => {
-                              const displayedAgencyNames = detail.agencyNames.slice(0, 2);
+                              const displayedAgencyNames = detail.topLevelAgencyNames.slice(0, 2);
                               return (
                                 <li key={detail.name}>
                                   <span>{detail.name}</span>
                                   {displayedAgencyNames.length > 0 && (
                                     <small>
                                       {displayedAgencyNames.join(", ")}
-                                      {detail.agencyCount > displayedAgencyNames.length ? ", ..." : ""}
+                                      {detail.topLevelAgencyCount > displayedAgencyNames.length ? ", ..." : ""}
                                     </small>
                                   )}
                                 </li>
