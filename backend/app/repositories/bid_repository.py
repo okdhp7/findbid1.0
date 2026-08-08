@@ -29,8 +29,17 @@ class BidRepository:
         return self.to_record(model) if model else None
 
     def upsert_many(self, records: list[BidRecord]) -> int:
+        model_columns = {
+            column.name
+            for column in BidNotice.__table__.columns
+            if column.name not in {"created_at", "updated_at"}
+        }
         for record in records:
-            values = record.model_dump(by_alias=False)
+            values = {
+                key: value
+                for key, value in record.model_dump(by_alias=False).items()
+                if key in model_columns
+            }
             model = self.session.get(BidNotice, record.id)
             if model is None:
                 self.session.add(BidNotice(**values))

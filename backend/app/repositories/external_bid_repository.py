@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.agency_types import normalize_agency_name, resolve_agency_types
 from app.database import SessionLocal
 from app.eligibility.rules import COMPANY_PROFILE
 from app.knowledge import analyze_query
@@ -587,6 +588,7 @@ class ExternalBidRepository:
         row: dict[str, Any],
         request: SearchRequest | None = None,
         semantic_similarity: int | None = None,
+        demand_agency_type: str = "",
     ) -> BidRecord:
         request = request or SearchRequest()
         budget = int(row.get("estimated_price") or 0)
@@ -657,6 +659,7 @@ class ExternalBidRepository:
             company_profile=company_profile,
             semantic_similarity=semantic_similarity,
             license_data_known=row.get("required_licenses") is not None,
+            demand_agency_type=demand_agency_type,
         )
 
         return BidRecord.model_validate(
@@ -671,6 +674,7 @@ class ExternalBidRepository:
                 "demand_agency": row.get("agency_name")
                 or row.get("noticer_name")
                 or "기관 미정",
+                "demand_agency_type": demand_agency_type,
                 "region": participant_region,
                 "budget": budget,
                 "budget_label": self._budget_label(budget),
@@ -754,7 +758,17 @@ class ExternalBidRepository:
             """
         )
         row = self.session.execute(statement, {"bid_id": bid_id}).mappings().first()
-        return self._to_record(dict(row)) if row else None
+        if not row:
+            return None
+        row_data = dict(row)
+        agency_name = str(
+            row_data.get("agency_name") or row_data.get("noticer_name") or ""
+        )
+        agency_types = resolve_agency_types([agency_name])
+        return self._to_record(
+            row_data,
+            demand_agency_type=agency_types.get(normalize_agency_name(agency_name), ""),
+        )
 
     def count_all(self) -> int:
         statement = text(f"SELECT count(*) FROM {self.table_name}")
@@ -993,11 +1007,21 @@ class ExternalBidRepository:
                 "지식사전·핵심어 재정렬: "
                 f"{semantic_count:,}건 → {len(rows):,}건"
             )
+        agency_types = resolve_agency_types(
+            str(row.get("agency_name") or row.get("noticer_name") or "")
+            for row in rows
+        )
         records = [
             self._to_record(
                 row,
                 request,
                 semantic_scores.get(str(row["bid_number"])),
+                agency_types.get(
+                    normalize_agency_name(
+                        str(row.get("agency_name") or row.get("noticer_name") or "")
+                    ),
+                    "",
+                ),
             )
             for row in rows
         ]

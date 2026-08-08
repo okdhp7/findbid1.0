@@ -50,6 +50,7 @@ FIT_WEIGHTS = {
     "유사 수행실적": 0.16,
     "검색 키워드": 0.11,
     "참가 지역": 0.07,
+    "기관유형": 0.07,
     "사업 금액": 0.06,
 }
 QUALIFICATION_TERMS = (
@@ -344,6 +345,7 @@ def calculate_hybrid_score(
     company_profile: dict[str, Any],
     semantic_similarity: int | None = None,
     license_data_known: bool = True,
+    demand_agency_type: str = "",
 ) -> HybridScore:
     normalized_corpus = _normalize(corpus)
     licenses = [str(value) for value in company_profile.get("licenses", [])]
@@ -359,6 +361,11 @@ def calculate_hybrid_score(
     service_regions = [
         str(value).strip()
         for value in company_profile.get("service_regions", [])
+        if str(value).strip()
+    ]
+    service_agency_types = [
+        str(value).strip()
+        for value in company_profile.get("service_agency_types", [])
         if str(value).strip()
     ]
 
@@ -490,6 +497,18 @@ def calculate_hybrid_score(
             round(100 - ((budget / int(effective_max_budget)) - 1) * 100),
         )
 
+    serves_all_agencies = "전체 기관" in service_agency_types
+    if serves_all_agencies:
+        agency_type_score = 100
+    elif not service_agency_types:
+        agency_type_score = 50
+    elif not demand_agency_type:
+        agency_type_score = 50
+    elif demand_agency_type in service_agency_types:
+        agency_type_score = 100
+    else:
+        agency_type_score = 20
+
     breakdown = {
         "필수자격": qualification_score,
         "의미 유사도": semantic_score,
@@ -497,11 +516,15 @@ def calculate_hybrid_score(
         "유사 수행실적": experience_score,
         "검색 키워드": keyword_score,
         "참가 지역": region_score,
+        "기관유형": agency_type_score,
         "사업 금액": budget_score,
     }
+    active_fit_names = list(FIT_WEIGHTS)
+    if not service_agency_types:
+        active_fit_names.remove("기관유형")
     weighted_score = _weighted_fit_score(
         breakdown,
-        list(FIT_WEIGHTS),
+        active_fit_names,
     )
 
     if hard_failure:
@@ -561,6 +584,13 @@ def calculate_hybrid_score(
         )
     if is_new:
         reasons.append("최근 7일 이내 등록된 신규 공고입니다.")
+    if service_agency_types and not serves_all_agencies:
+        if not demand_agency_type:
+            reasons.append("수요기관 종류를 판별할 수 없어 기관유형에 중립 점수를 적용했습니다.")
+        elif agency_type_score == 100:
+            reasons.append(f"수행 가능 기관유형인 {demand_agency_type} 공고입니다.")
+        else:
+            reasons.append(f"수요기관 종류 {demand_agency_type}이 수행 가능 기관유형과 다릅니다.")
 
     return HybridScore(
         score=max(0, min(100, weighted_score)),

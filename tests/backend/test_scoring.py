@@ -453,3 +453,56 @@ def test_bid_below_preferred_max_budget_receives_full_budget_fit() -> None:
     )
 
     assert result.breakdown["사업 금액"] == 100
+
+
+def test_service_agency_type_is_a_soft_suitability_factor() -> None:
+    common = {
+        "corpus": "AI 플랫폼 구축",
+        "budget": 300_000_000,
+        "days_left": 10,
+        "deadline_known": True,
+        "is_new": False,
+        "required_licenses": [],
+        "region_restriction": "",
+        "sme_only": False,
+        "request": SearchRequest(semantic_query="AI 플랫폼 구축"),
+        "company_profile": {
+            **COMPANY_PROFILE,
+            "service_agency_types": ["교육기관", "국가기관"],
+        },
+    }
+
+    matching = calculate_hybrid_score(
+        **common,
+        demand_agency_type="교육기관",
+    )
+    mismatching = calculate_hybrid_score(
+        **common,
+        demand_agency_type="지방공기업",
+    )
+
+    assert matching.breakdown["기관유형"] == 100
+    assert mismatching.breakdown["기관유형"] == 20
+    assert matching.score > mismatching.score
+    assert mismatching.eligibility == "참가 가능"
+
+
+def test_all_agency_types_gives_full_agency_fit() -> None:
+    result = calculate_hybrid_score(
+        corpus="AI 플랫폼 구축",
+        budget=300_000_000,
+        days_left=10,
+        deadline_known=True,
+        is_new=False,
+        required_licenses=[],
+        region_restriction="",
+        sme_only=False,
+        request=SearchRequest(semantic_query="AI 플랫폼 구축"),
+        company_profile={
+            **COMPANY_PROFILE,
+            "service_agency_types": ["전체 기관"],
+        },
+        demand_agency_type="",
+    )
+
+    assert result.breakdown["기관유형"] == 100

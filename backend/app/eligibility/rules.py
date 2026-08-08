@@ -11,6 +11,7 @@ COMPANY_PROFILE = {
     "experiences": [],
     "preferred_max_budget": None,
     "service_regions": ["전국"],
+    "service_agency_types": ["전체 기관"],
     "excluded_business_areas": [],
     "completion": 86,
 }

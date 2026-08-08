@@ -158,6 +158,12 @@ function restoreCompanyProfile(): CompanyProfile {
       experiences: Array.isArray(parsed.experiences)
         ? parsed.experiences
         : DEFAULT_COMPANY_PROFILE.experiences,
+      serviceRegions: Array.isArray(parsed.serviceRegions)
+        ? parsed.serviceRegions
+        : DEFAULT_COMPANY_PROFILE.serviceRegions,
+      serviceAgencyTypes: Array.isArray(parsed.serviceAgencyTypes)
+        ? parsed.serviceAgencyTypes
+        : DEFAULT_COMPANY_PROFILE.serviceAgencyTypes,
     };
   } catch {
     return DEFAULT_COMPANY_PROFILE;

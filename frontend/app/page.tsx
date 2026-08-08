@@ -32,6 +32,67 @@ const regions = [
   "경남",
   "제주",
 ];
+type AgencyTypeDetail = {
+  name: string;
+  agencyNames: string[];
+  agencyCount: number;
+};
+
+type AgencyTypeOption = {
+  name: string;
+  details: AgencyTypeDetail[];
+};
+
+const agencyTypeOptions: AgencyTypeOption[] = [
+  {
+    name: "공기업",
+    details: ["산하기관", "정부출자기관", "정부출연기관", "정부투자기관", "출자·출연·투자기관의 자회사"],
+  },
+  {
+    name: "교육기관",
+    details: ["교육행정조직", "유치원", "초등학교", "중학교", "고등학교", "고등교육기관", "특수학교", "평생교육기관"],
+  },
+  {
+    name: "국가기관",
+    details: ["중앙행정기관", "소속기관", "특별지방행정기관", "사법조직", "입법조직", "헌법조직", "국군조직"],
+  },
+  {
+    name: "기타공공기관",
+    details: ["기금관리기관", "정부출연·보조기관", "행정사무대행단체", "기타 산하기관"],
+  },
+  {
+    name: "기타기관",
+    details: ["금융기관", "민간단체", "평생교육기관", "기타 산하기관"],
+  },
+  {
+    name: "정부투자기관",
+    details: ["정부투자기관", "정부투자기관 및 기타 기관"],
+  },
+  {
+    name: "준정부기관",
+    details: ["기금관리기관", "정부출연·보조기관", "정부투자기관", "기타 산하기관"],
+  },
+  {
+    name: "지방공기업",
+    details: ["지방 공사·공단", "지방자치단체 산하기관", "행정사무대행단체"],
+  },
+  {
+    name: "지방자치단체",
+    details: ["광역자치단체", "기초자치단체", "본청", "직속기관", "사업소", "하부행정기구", "지방의회"],
+  },
+  {
+    name: "지자체 출자출연기관",
+    details: ["지방 출자기관", "지방 출연기관", "재출연기관", "일부투자기관", "출자·출연기관의 자회사"],
+  },
+].map((option) => ({
+  name: option.name,
+  details: option.details.map((detail) => ({
+    name: detail,
+    agencyNames: [],
+    agencyCount: 0,
+  })),
+}));
+const agencyTypeNames = agencyTypeOptions.map((option) => option.name);
 const budgetOptions = [
   { label: "금액 전체", value: 0 },
   { label: "1억원 이하", value: 100_000_000 },
@@ -128,6 +189,7 @@ type CompanyProfileDraft = {
   experiences: string;
   preferredMaxBudget: string;
   serviceRegions: string[];
+  serviceAgencyTypes: string[];
   excludedBusinessAreas: string;
 };
 
@@ -150,6 +212,16 @@ function normalizeServiceRegions(values: unknown): string[] {
   );
 
   return normalized.includes("전체 지역") ? ["전체 지역"] : normalized;
+}
+
+function normalizeServiceAgencyTypes(values: unknown): string[] {
+  const normalized = Array.from(
+    new Set(
+      normalizeProfileList(values).filter((value) =>
+        value === "전체 기관" || agencyTypeNames.includes(value as (typeof agencyTypeNames)[number])),
+    ),
+  );
+  return normalized.includes("전체 기관") ? ["전체 기관"] : normalized;
 }
 
 function normalizeSavedBid(value: unknown): Bid | null {
@@ -246,6 +318,9 @@ function normalizeCompanyProfile(value: unknown): CompanyProfile {
       ? Math.round(preferredMaxBudget)
       : null,
     serviceRegions: normalizeServiceRegions(profile.serviceRegions),
+    serviceAgencyTypes: normalizeServiceAgencyTypes(
+      profile.serviceAgencyTypes ?? DEFAULT_COMPANY_PROFILE.serviceAgencyTypes,
+    ),
     excludedBusinessAreas: normalizeProfileList(profile.excludedBusinessAreas),
     completion: typeof profile.completion === "number"
       ? Math.max(0, Math.min(100, Math.round(profile.completion)))
@@ -266,6 +341,7 @@ function profileToDraft(profile: CompanyProfile): CompanyProfileDraft {
       ? String(profile.preferredMaxBudget / 100_000_000)
       : "",
     serviceRegions: normalizeServiceRegions(profile.serviceRegions),
+    serviceAgencyTypes: normalizeServiceAgencyTypes(profile.serviceAgencyTypes),
     excludedBusinessAreas: profile.excludedBusinessAreas.join(", "),
   };
 }
@@ -283,16 +359,17 @@ function splitProfileValues(value: string): string[] {
 
 function profileCompletion(profile: Omit<CompanyProfile, "completion">): number {
   let completion = 0;
-  if (profile.name) completion += 15;
-  if (profile.location) completion += 15;
-  if (profile.size) completion += 15;
-  if (profile.licenses.length) completion += 10;
+  if (profile.name) completion += 14;
+  if (profile.location) completion += 12;
+  if (profile.size) completion += 10;
+  if (profile.licenses.length) completion += 14;
   if (profile.technologies.length) completion += 10;
   if (profile.businessAreas.length) completion += 10;
-  if (profile.serviceRegions.length) completion += 11;
-  if (profile.experiences.length) completion += 5;
-  if (profile.preferredMaxBudget) completion += 5;
-  if (profile.excludedBusinessAreas.length) completion += 5;
+  if (profile.serviceRegions.length) completion += 10;
+  if (profile.serviceAgencyTypes.length) completion += 8;
+  if (profile.experiences.length) completion += 6;
+  if (profile.preferredMaxBudget) completion += 3;
+  if (profile.excludedBusinessAreas.length) completion += 3;
   return Math.min(100, completion);
 }
 
@@ -665,6 +742,9 @@ export default function Home() {
   const [excludeConfirmOpen, setExcludeConfirmOpen] = useState(false);
   const [feedbackSubmittingId, setFeedbackSubmittingId] = useState("");
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+  const [agencyTypeDetails, setAgencyTypeDetails] = useState<AgencyTypeOption[]>(
+    agencyTypeOptions,
+  );
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
     ...DEFAULT_COMPANY_PROFILE,
   });
@@ -723,6 +803,27 @@ export default function Home() {
       .catch(() => {
         if (active) setFeedbackEnabled(false);
       });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/company/agency-types", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const data = await response.json() as { types?: AgencyTypeOption[] };
+        return Array.isArray(data.types) ? data.types : [];
+      })
+      .then((types) => {
+        if (active && types.length) {
+          setAgencyTypeDetails(agencyTypeOptions.map((fallback) => (
+            types.find((option) => option.name === fallback.name) ?? fallback
+          )));
+        }
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
@@ -1255,6 +1356,28 @@ export default function Home() {
     });
   };
 
+  const toggleProfileServiceAgencyType = (selectedAgencyType: string) => {
+    setProfileDraft((current) => {
+      if (selectedAgencyType === "전체 기관") {
+        return {
+          ...current,
+          serviceAgencyTypes: current.serviceAgencyTypes.includes("전체 기관")
+            ? []
+            : ["전체 기관"],
+        };
+      }
+
+      const individualTypes = current.serviceAgencyTypes.filter(
+        (agencyType) => agencyType !== "전체 기관",
+      );
+      const serviceAgencyTypes = individualTypes.includes(selectedAgencyType)
+        ? individualTypes.filter((agencyType) => agencyType !== selectedAgencyType)
+        : [...individualTypes, selectedAgencyType];
+
+      return { ...current, serviceAgencyTypes };
+    });
+  };
+
   const saveCompanyProfile = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const budgetEok = Number(profileDraft.preferredMaxBudget);
@@ -1270,6 +1393,7 @@ export default function Home() {
         ? Math.min(Math.round(budgetEok * 100_000_000), 100_000_000_000_000)
         : null,
       serviceRegions: normalizeServiceRegions(profileDraft.serviceRegions),
+      serviceAgencyTypes: normalizeServiceAgencyTypes(profileDraft.serviceAgencyTypes),
       excludedBusinessAreas: splitProfileValues(profileDraft.excludedBusinessAreas),
     };
     const nextProfile: CompanyProfile = {
@@ -3234,6 +3358,73 @@ export default function Home() {
                 </div>
                 <small className="profile-field-note">
                   복수 선택할 수 있습니다. 전체 지역은 다른 지역과 함께 선택되지 않습니다.
+                </small>
+              </div>
+              <div className="profile-field profile-field-wide">
+                <span className="profile-field-label" id="profile-service-agency-types-label">
+                  수행 가능 기관유형
+                </span>
+                <div
+                  className="profile-agency-type-options"
+                  role="group"
+                  aria-labelledby="profile-service-agency-types-label"
+                >
+                  {[
+                    {
+                      name: "전체 기관",
+                      details: [{
+                        name: "나라장터에 등록된 모든 기관종류",
+                        agencyNames: [],
+                        agencyCount: 0,
+                      }],
+                    },
+                    ...agencyTypeDetails,
+                  ].map((option, index) => {
+                    const selected = profileDraft.serviceAgencyTypes.includes(option.name);
+                    const tooltipId = `profile-agency-type-tooltip-${index}`;
+                    return (
+                      <span className="profile-agency-type-option" key={option.name}>
+                        <button
+                          type="button"
+                          aria-pressed={selected}
+                          aria-describedby={tooltipId}
+                          onClick={() => toggleProfileServiceAgencyType(option.name)}
+                        >
+                          <span aria-hidden="true">{selected ? "✓" : ""}</span>
+                          {option.name}
+                        </button>
+                        <span
+                          className="profile-agency-type-tooltip"
+                          id={tooltipId}
+                          role="tooltip"
+                        >
+                          <strong>{option.name} 세부사항</strong>
+                          <ul
+                            aria-label={`${option.name} 세부 기관 목록`}
+                            tabIndex={0}
+                          >
+                            {option.details.map((detail) => {
+                              const displayedAgencyNames = detail.agencyNames.slice(0, 2);
+                              return (
+                                <li key={detail.name}>
+                                  <span>{detail.name}</span>
+                                  {displayedAgencyNames.length > 0 && (
+                                    <small>
+                                      {displayedAgencyNames.join(", ")}
+                                      {detail.agencyCount > displayedAgencyNames.length ? ", ..." : ""}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
+                <small className="profile-field-note">
+                  복수 선택할 수 있습니다. 전체 기관은 다른 기관종류와 함께 선택되지 않습니다.
                 </small>
               </div>
               <div className="profile-field profile-field-wide">

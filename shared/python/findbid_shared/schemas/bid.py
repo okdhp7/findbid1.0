@@ -33,6 +33,7 @@ class BidRecord(CamelModel):
     title: str
     agency: str
     demand_agency: str
+    demand_agency_type: str = ""
     region: str = "전국"
     budget: int = 0
     budget_label: str = "금액 미정"
@@ -71,6 +72,7 @@ class CompanyProfileInput(CamelModel):
     experiences: list[str] = Field(default_factory=list, max_length=50)
     preferred_max_budget: int | None = Field(default=None, ge=0)
     service_regions: list[str] = Field(default_factory=list, max_length=50)
+    service_agency_types: list[str] = Field(default_factory=list, max_length=20)
     excluded_business_areas: list[str] = Field(default_factory=list, max_length=50)
     completion: int = Field(default=0, ge=0, le=100)
 

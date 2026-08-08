@@ -15,6 +15,7 @@ export type Bid = {
   title: string;
   agency: string;
   demandAgency: string;
+  demandAgencyType?: string;
   region: string;
   budget: number;
   budgetLabel: string;
@@ -190,6 +191,7 @@ export type CompanyProfile = {
   experiences: string[];
   preferredMaxBudget: number | null;
   serviceRegions: string[];
+  serviceAgencyTypes: string[];
   excludedBusinessAreas: string[];
   completion: number;
 };
@@ -204,6 +206,7 @@ export const companyProfile: CompanyProfile = {
   experiences: [],
   preferredMaxBudget: null,
   serviceRegions: ["전체 지역"],
+  serviceAgencyTypes: ["전체 기관"],
   excludedBusinessAreas: [],
   completion: 86,
 };
