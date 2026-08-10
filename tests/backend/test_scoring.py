@@ -38,6 +38,33 @@ def test_profile_matching_bid_scores_higher_than_unrelated_bid() -> None:
     assert matching.breakdown["보유 기술"] > unrelated.breakdown["보유 기술"]
 
 
+def test_keyword_score_ignores_internal_whitespace() -> None:
+    common = {
+        "corpus": "공공시설 태양광 발전 설비 구축",
+        "budget": 100_000_000,
+        "days_left": 10,
+        "deadline_known": True,
+        "is_new": True,
+        "required_licenses": [],
+        "region_restriction": "",
+        "sme_only": False,
+        "company_profile": COMPANY_PROFILE,
+    }
+
+    spaced = calculate_hybrid_score(
+        request=SearchRequest(include_keywords=["태양광 발전"]),
+        **common,
+    )
+    compact = calculate_hybrid_score(
+        request=SearchRequest(include_keywords=["태양광발전"]),
+        **common,
+    )
+
+    assert spaced.breakdown["검색 키워드"] == 100
+    assert compact.breakdown["검색 키워드"] == 100
+    assert spaced.score == compact.score
+
+
 def test_recommendation_confidence_uses_bid_evidence_not_only_profile_completion() -> None:
     complete_profile = {
         **COMPANY_PROFILE,

@@ -138,6 +138,27 @@ def test_required_semantic_terms_are_applied_before_vector_ranking() -> None:
     assert params["semantic_must_0_0"] == "%토목구조물%"
 
 
+def test_detail_keywords_ignore_internal_whitespace_in_sql() -> None:
+    repository = object.__new__(ExternalBidRepository)
+    spaced_conditions, spaced_params, _ = repository._search_parts(
+        SearchRequest(
+            include_keywords=["태양광 발전"],
+            exclude_keywords=["ESS 장비"],
+        )
+    )
+    compact_conditions, compact_params, _ = repository._search_parts(
+        SearchRequest(
+            include_keywords=["태양광발전"],
+            exclude_keywords=["ESS장비"],
+        )
+    )
+
+    assert spaced_params["include_0"] == compact_params["include_0"] == "%태양광발전%"
+    assert spaced_params["exclude_0"] == compact_params["exclude_0"] == "%ess장비%"
+    assert any("regexp_replace" in condition for condition in spaced_conditions)
+    assert spaced_conditions == compact_conditions
+
+
 def test_detail_demand_agencies_expand_top_level_and_keep_direct_input(
     monkeypatch,
 ) -> None:

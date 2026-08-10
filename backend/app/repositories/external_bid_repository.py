@@ -939,17 +939,22 @@ class ExternalBidRepository:
             )
         )
         corpus = self._corpus()
+        normalized_keyword_corpus = (
+            f"regexp_replace({corpus}, '[[:space:]]+', '', 'g')"
+        )
         if includes:
             keyword_conditions = []
             for index, word in enumerate(includes):
                 name = f"include_{index}"
-                keyword_conditions.append(f"{corpus} LIKE :{name}")
-                params[name] = f"%{word.lower()}%"
+                normalized_word = re.sub(r"\s+", "", word.lower())
+                keyword_conditions.append(f"{normalized_keyword_corpus} LIKE :{name}")
+                params[name] = f"%{normalized_word}%"
             conditions.append(f"({' OR '.join(keyword_conditions)})")
         for index, word in enumerate(excludes):
             name = f"exclude_{index}"
-            conditions.append(f"{corpus} NOT LIKE :{name}")
-            params[name] = f"%{word.lower()}%"
+            normalized_word = re.sub(r"\s+", "", word.lower())
+            conditions.append(f"{normalized_keyword_corpus} NOT LIKE :{name}")
+            params[name] = f"%{normalized_word}%"
 
         semantic_corpus = self._semantic_corpus()
         semantic_conditions = build_search_conditions(analysis, request)

@@ -104,6 +104,8 @@ def _matches(corpus: str, value: str) -> bool:
         return False
     if normalized in corpus:
         return True
+    if normalized.replace(" ", "") in "".join(corpus.split()):
+        return True
     meaningful = [
         token
         for token in _tokens(normalized)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -66,8 +68,16 @@ class BidRepository:
             statement = statement.where(BidNotice.days_left <= request.closing_within_days)
 
         models = self.session.scalars(statement).all()
-        includes = [word.strip().lower() for word in request.include_keywords if word.strip()]
-        excludes = [word.strip().lower() for word in request.exclude_keywords if word.strip()]
+        includes = [
+            re.sub(r"\s+", "", word.lower())
+            for word in request.include_keywords
+            if word.strip()
+        ]
+        excludes = [
+            re.sub(r"\s+", "", word.lower())
+            for word in request.exclude_keywords
+            if word.strip()
+        ]
         child_agency_names, direct_agencies = resolve_demand_agency_filters(
             request.demand_agencies
         )
@@ -88,9 +98,10 @@ class BidRepository:
             corpus = " ".join(
                 [record.title, record.summary, *record.tags, *record.matched]
             ).lower()
-            if includes and not any(word in corpus for word in includes):
+            normalized_keyword_corpus = re.sub(r"\s+", "", corpus)
+            if includes and not any(word in normalized_keyword_corpus for word in includes):
                 continue
-            if any(word in corpus for word in excludes):
+            if any(word in normalized_keyword_corpus for word in excludes):
                 continue
             results.append(record)
 
