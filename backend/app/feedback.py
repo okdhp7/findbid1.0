@@ -43,7 +43,7 @@ def normalize_session_id(value: str) -> str:
 def search_fingerprint(request: SearchRequest) -> str:
     values = request.model_dump(
         mode="json",
-        exclude={"page", "limit"},
+        exclude={"page", "limit", "search_trigger"},
         by_alias=False,
     )
     values["fingerprint_schema_version"] = FINGERPRINT_SCHEMA_VERSION
@@ -58,11 +58,15 @@ def search_fingerprint(request: SearchRequest) -> str:
 
 def _record_features(record: BidRecord) -> dict[str, Any]:
     return {
+        "title": record.title,
         "category": record.category,
         "region": record.region,
         "contractMethod": record.contract_method,
         "demandAgency": record.demand_agency,
         "budget": record.budget,
+        "score": record.score,
+        "scoreConfidence": record.score_confidence,
+        "eligibility": record.eligibility,
         "tags": record.tags[:12],
     }
 
@@ -330,6 +334,8 @@ class FeedbackStore:
         fingerprint: str,
         records: list[BidRecord],
         search_conditions: list[dict[str, Any]] | None = None,
+        search_request: SearchRequest | None = None,
+        result_summary: dict[str, Any] | None = None,
     ) -> None:
         session_id = normalize_session_id(session_id)
         if not session_id:
@@ -342,6 +348,12 @@ class FeedbackStore:
                     for record in records
                 },
                 "conditions": search_conditions or [],
+                "request": (
+                    search_request.model_dump(mode="json", by_alias=True)
+                    if search_request is not None
+                    else {}
+                ),
+                "summary": result_summary or {},
             }
             self.redis.setex(
                 self._impression_key(session_id, search_id),
@@ -382,7 +394,7 @@ class FeedbackStore:
         self,
         session_id: str,
         request: FeedbackRequest,
-    ) -> None:
+    ) -> dict[str, Any]:
         if not self.is_enabled():
             raise PermissionError("추천 피드백 수집이 비활성화되어 있습니다.")
         session_id = normalize_session_id(session_id)
@@ -483,6 +495,7 @@ class FeedbackStore:
                     )
             self.redis.expire(key, self.ttl)
             self.touch_session(session_id)
+            return impression
         except ValueError:
             raise
         except Exception as error:

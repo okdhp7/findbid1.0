@@ -132,6 +132,8 @@ type SearchSnapshot = {
   sortMode?: "opportunity" | null;
 };
 
+type SearchTrigger = "filter_auto" | "ai_button" | "pagination";
+
 const DEFAULT_SEARCH: SearchSnapshot = {
   category: "전체",
   region: "전체 지역",
@@ -1132,7 +1134,11 @@ export default function Home() {
     sortMode: searchSortMode,
   });
 
-  const runSearch = useCallback(async (snapshot: SearchSnapshot, page = 1) => {
+  const runSearch = useCallback(async (
+    snapshot: SearchSnapshot,
+    page = 1,
+    searchTrigger: SearchTrigger = "filter_auto",
+  ) => {
     const requestId = searchRequestIdRef.current + 1;
     searchRequestIdRef.current = requestId;
     searchAbortControllerRef.current?.abort();
@@ -1159,6 +1165,7 @@ export default function Home() {
           sortMode: snapshot.sortMode ?? null,
           semanticQuery: snapshot.semanticQuery,
           companyProfile: companyProfileRef.current,
+          searchTrigger,
           page,
           limit: PAGE_SIZE,
         }),
@@ -1241,9 +1248,13 @@ export default function Home() {
     autoSearchTimerRef.current = null;
   };
 
-  const runSearchNow = (snapshot: SearchSnapshot, page = 1) => {
+  const runSearchNow = (
+    snapshot: SearchSnapshot,
+    page = 1,
+    searchTrigger: SearchTrigger = "filter_auto",
+  ) => {
     cancelScheduledSearch();
-    void runSearch(snapshot, page);
+    void runSearch(snapshot, page, searchTrigger);
   };
 
   const postRecommendationFeedback = async (
@@ -1354,7 +1365,7 @@ export default function Home() {
       if (feedbackType === "exclude") {
         setSelected(null);
       }
-      await runSearch(currentSearchSnapshot(), currentPage);
+      await runSearch(currentSearchSnapshot(), currentPage, "pagination");
     } catch (error) {
       showSaveNotice(
         error instanceof Error
@@ -1388,10 +1399,14 @@ export default function Home() {
     rememberSemanticQuery(normalizedQuery);
     setSemanticQueryActive(Boolean(normalizedQuery));
     setSemanticHistoryOpen(false);
-    runSearchNow({
-      ...snapshot,
-      semanticQuery: normalizedQuery,
-    });
+    runSearchNow(
+      {
+        ...snapshot,
+        semanticQuery: normalizedQuery,
+      },
+      1,
+      "ai_button",
+    );
   };
 
   const selectSemanticHistory = (query: string) => {
@@ -1664,6 +1679,12 @@ export default function Home() {
       showSaveNotice("기업 프로필을 브라우저에 저장하지 못했습니다.");
       return;
     }
+
+    void fetch("/api/company/profile", {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(nextProfile),
+    }).catch(() => undefined);
 
     companyProfileRef.current = nextProfile;
     setCompanyProfile(nextProfile);
@@ -2950,6 +2971,7 @@ export default function Home() {
                 onClick={() => runSearchNow(
                   currentSearchSnapshot(),
                   Math.max(1, currentPage - PAGE_JUMP),
+                  "pagination",
                 )}
               >
                 이전 5페이지
@@ -2958,7 +2980,7 @@ export default function Home() {
                 <>
                   <button
                     type="button"
-                    onClick={() => runSearchNow(currentSearchSnapshot(), 1)}
+                    onClick={() => runSearchNow(currentSearchSnapshot(), 1, "pagination")}
                   >
                     1
                   </button>
@@ -2971,7 +2993,7 @@ export default function Home() {
                   key={page}
                   className={page === currentPage ? "active" : ""}
                   aria-current={page === currentPage ? "page" : undefined}
-                  onClick={() => runSearchNow(currentSearchSnapshot(), page)}
+                  onClick={() => runSearchNow(currentSearchSnapshot(), page, "pagination")}
                 >
                   {page}
                 </button>
@@ -2981,7 +3003,7 @@ export default function Home() {
                   {pageWindowEnd < totalPages - 1 && <span aria-hidden="true">…</span>}
                   <button
                     type="button"
-                    onClick={() => runSearchNow(currentSearchSnapshot(), totalPages)}
+                    onClick={() => runSearchNow(currentSearchSnapshot(), totalPages, "pagination")}
                   >
                     {totalPages}
                   </button>
@@ -2994,6 +3016,7 @@ export default function Home() {
                 onClick={() => runSearchNow(
                   currentSearchSnapshot(),
                   Math.min(totalPages, currentPage + PAGE_JUMP),
+                  "pagination",
                 )}
               >
                 다음 5페이지

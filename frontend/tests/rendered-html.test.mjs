@@ -412,12 +412,18 @@ test("익명 세션 추천 피드백과 비밀번호 관리페이지를 제공�
   assert.match(adminPage, /추천 운영관리/);
   assert.match(adminPage, /\/api\/admin\/login/);
   assert.match(adminPage, /\/api\/admin\/status/);
+  assert.match(adminPage, /운영정보 새로고침/);
+  assert.match(adminPage, /Promise\.all\(\[loadStatus\(\), loadNotifications\(\)\]\)/);
   assert.match(adminAuth, /process\.env\.FINDBID_ADMIN_PASSWORD \?\? "findbid2026"/);
   assert.match(adminAuth, /HttpOnly/);
   assert.match(adminAuth, /SameSite=Strict/);
   assert.match(css, /\.app-shell \.bid-feedback/);
   assert.match(css, /\.admin-login-card/);
+  assert.match(adminPage, /authenticated === null/);
+  assert.match(adminPage, /관리자 인증을 확인하고 있습니다/);
+  assert.match(css, /\.admin-auth-loading/);
   assert.match(css, /\.admin-dashboard/);
+  assert.match(css, /\.admin-activity-table-wrap\s*\{[\s\S]*?max-height: 720px/);
 });
 
 test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영한다", async () => {
@@ -452,6 +458,9 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
   assert.match(page, /className="profile-agency-type-options"/);
   assert.match(page, /className="profile-agency-type-tooltip"/);
   assert.match(page, /fetch\("\/api\/company\/agency-types"/);
+  assert.match(page, /fetch\("\/api\/company\/profile"/);
+  assert.match(page, /searchTrigger/);
+  assert.match(page, /"ai_button"/);
   assert.match(page, /fetch\(\s*`\/api\/company\/agency-suggestions\?q=/);
   assert.match(page, /agency-suggestions\?q=\$\{encodeURIComponent\(query\)\}&limit=\$\{agencySuggestionLimit\}/);
   assert.match(page, /const AGENCY_SUGGESTION_PAGE_SIZE = 20/);
@@ -514,6 +523,39 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
   assert.match(css, /pointer-events: auto/);
   assert.match(css, /button\[aria-pressed="true"\]/);
   assert.match(css, /\.app-shell \.profile-form-actions/);
+});
+
+test("관리페이지에서 DB 사용자 검색 피드백 기록을 조회하고 삭제한다", async () => {
+  const [adminPage, activityPage, css, activityRoute, activityUserRoute] = await Promise.all([
+    readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/activity-logs/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/activity-logs/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/activity-users/[sessionHash]/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(adminPage, /href="\/admin\/activity-logs">DB 활동로그/);
+  assert.doesNotMatch(adminPage, /fetch\("\/api\/admin\/activity-logs"/);
+  assert.match(activityPage, /사용자·AI 검색·피드백 기록/);
+  assert.match(activityPage, /사용자·기업프로필/);
+  assert.match(activityPage, /AI 검색 이력/);
+  assert.match(activityPage, /추천 피드백/);
+  assert.match(activityPage, /로그 새로고침/);
+  assert.match(activityPage, /const ACTIVITY_PAGE_SIZE = 15/);
+  assert.match(activityPage, /pageSize: String\(ACTIVITY_PAGE_SIZE\)/);
+  assert.match(activityPage, /activitySequence/);
+  assert.match(activityPage, /<th>순번<\/th>/);
+  assert.match(activityPage, /admin-activity-pagination/);
+  assert.match(activityPage, />이전<\/button>/);
+  assert.match(activityPage, />다음<\/button>/);
+  assert.match(activityPage, /deleteActivityUser/);
+  assert.match(activityRoute, /new URLSearchParams/);
+  assert.match(activityRoute, /\/api\/v1\/admin\/activity-logs\?\$\{query\}/);
+  assert.match(activityUserRoute, /method: "DELETE"/);
+  assert.match(css, /\.admin-tabs/);
+  assert.match(css, /\.admin-activity-subtabs/);
+  assert.match(css, /\.admin-activity-table/);
+  assert.match(css, /\.admin-activity-pagination/);
 });
 
 test("검색 과정과 처리시간을 펼쳐서 확인할 수 있다", async () => {

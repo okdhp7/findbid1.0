@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, Header, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.feedback import feedback_store
-from app.repositories import BidRepository
+from app.repositories import ActivityLogRepository, BidRepository
 from app.repositories.notification_repository import NotificationRepository
 from findbid_shared.config import get_settings
 from findbid_shared.schemas import BidRecord
@@ -64,6 +66,33 @@ def update_feedback_settings(
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return {"feedbackEnabled": enabled}
+
+
+@router.get("/admin/activity-logs")
+def activity_logs(
+    log_type: Literal["users", "searches", "feedback"] = Query(
+        default="users", alias="type"
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=15, alias="pageSize", ge=1, le=100),
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    return ActivityLogRepository(session).admin_overview(log_type, page, page_size)
+
+
+@router.delete("/admin/activity-users/{session_hash}", status_code=204)
+def delete_activity_user(
+    session_hash: str,
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> None:
+    require_internal_key(x_internal_key)
+    if len(session_hash) != 64 or not ActivityLogRepository(session).delete_user_activity(
+        session_hash
+    ):
+        raise HTTPException(status_code=404, detail="사용자 활동기록을 찾을 수 없습니다.")
 
 
 @router.get("/admin/notifications")

@@ -35,9 +35,11 @@ def test_search_fingerprint_is_shared_between_pages() -> None:
         page=1,
     )
     second = first.model_copy(update={"page": 2})
+    explicit = first.model_copy(update={"search_trigger": "ai_button"})
     different = first.model_copy(update={"region": "경기"})
 
     assert search_fingerprint(first) == search_fingerprint(second)
+    assert search_fingerprint(first) == search_fingerprint(explicit)
     assert search_fingerprint(first) != search_fingerprint(different)
 
 

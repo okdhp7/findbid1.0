@@ -169,9 +169,11 @@ def test_semantic_cache_key_is_shared_between_pages() -> None:
         limit=20,
     )
     second_page = first_page.model_copy(update={"page": 2})
+    explicit_search = first_page.model_copy(update={"search_trigger": "ai_button"})
     different_filter = first_page.model_copy(update={"region": "서울"})
 
     assert _cache_key(first_page) == _cache_key(second_page)
+    assert _cache_key(first_page) == _cache_key(explicit_search)
     assert _cache_key(first_page) != _cache_key(different_filter)
 
 

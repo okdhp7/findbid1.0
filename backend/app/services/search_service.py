@@ -237,6 +237,25 @@ class SearchService:
                     condition.to_dict()
                     for condition in search_conditions
                 ],
+                search_request=request,
+                result_summary={
+                    "databaseTotal": database_total,
+                    "total": total,
+                    "eligibleTotal": eligible_total,
+                    "closingSoonTotal": closing_soon_total,
+                    "averageScore": average_score,
+                    "items": [
+                        {
+                            "bidId": item.id,
+                            "title": item.title,
+                            "demandAgency": item.demand_agency,
+                            "score": item.score,
+                            "scoreConfidence": item.score_confidence,
+                            "eligibility": item.eligibility,
+                        }
+                        for item in items[:20]
+                    ],
+                },
             )
 
         trace.append(f"최종 결과: {total:,}건")

@@ -1,4 +1,5 @@
 import { anonymousSession } from "../anonymous-session";
+import { clientMetadataHeaders } from "../client-metadata";
 
 const backendUrl = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:8000";
 
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
       headers: {
         "content-type": "application/json; charset=utf-8",
         "x-session-id": sessionId,
+        ...clientMetadataHeaders(request),
       },
       body: JSON.stringify(payload),
       cache: "no-store",

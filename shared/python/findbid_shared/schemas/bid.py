@@ -91,6 +91,7 @@ class SearchRequest(CamelModel):
     sort_mode: Literal["opportunity", "latest"] | None = None
     semantic_query: str = ""
     company_profile: CompanyProfileInput | None = None
+    search_trigger: Literal["filter_auto", "ai_button", "pagination"] = "filter_auto"
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=200)
 

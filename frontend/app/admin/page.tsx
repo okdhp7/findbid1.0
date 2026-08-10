@@ -63,7 +63,6 @@ export default function AdminPage() {
   const [notificationPublisher, setNotificationPublisher] = useState("관리자");
   const [notificationContent, setNotificationContent] = useState("");
   const [editingNotificationId, setEditingNotificationId] = useState<number | null>(null);
-
   const loadNotifications = useCallback(async () => {
     setNotificationLoading(true);
     try {
@@ -244,7 +243,18 @@ export default function AdminPage() {
     }
   };
 
-  if (authenticated !== true) {
+  if (authenticated === null) {
+    return (
+      <main className="admin-shell">
+        <section className="admin-auth-loading" role="status" aria-live="polite">
+          <span className="admin-auth-spinner" aria-hidden="true" />
+          <p>관리자 인증을 확인하고 있습니다.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (authenticated === false) {
     return (
       <main className="admin-shell">
         <section className="admin-login-card" aria-labelledby="admin-login-title">
@@ -285,13 +295,18 @@ export default function AdminPage() {
           <span>FB</span>
           <strong>FindBid</strong>
         </a>
+        <nav className="admin-tabs" aria-label="관리자 메뉴">
+          <a className="active" href="/admin" aria-current="page">운영 관리</a>
+          <a href="/admin/activity-logs">DB 활동로그</a>
+        </nav>
         <div>
           <button
             type="button"
             onClick={() => void Promise.all([loadStatus(), loadNotifications()])}
             disabled={loading || notificationLoading}
+            aria-label="운영 상태와 알림 새로고침"
           >
-            {loading ? "갱신 중..." : "새로고침"}
+            {loading || notificationLoading ? "갱신 중..." : "운영정보 새로고침"}
           </button>
           <button type="button" className="admin-logout" onClick={() => void logout()}>
             로그아웃

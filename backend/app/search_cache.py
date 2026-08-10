@@ -29,7 +29,7 @@ def _redis_client() -> Redis:
 def _cache_key(request: SearchRequest) -> str:
     values = request.model_dump(
         mode="json",
-        exclude={"page", "limit"},
+        exclude={"page", "limit", "search_trigger"},
         by_alias=False,
     )
     settings = get_settings()
