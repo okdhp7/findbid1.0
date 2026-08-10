@@ -52,6 +52,10 @@ type ActivityLogsResponse = {
 };
 
 type ActivityView = "users" | "searches" | "feedback";
+type ActivityDetailModal =
+  | { kind: "user"; user: ActivityUser }
+  | { kind: "search-request"; search: SearchActivity }
+  | { kind: "search-result"; search: SearchActivity };
 
 const ACTIVITY_PAGE_SIZE = 15;
 const INITIAL_PAGES: Record<ActivityView, number> = { users: 1, searches: 1, feedback: 1 };
@@ -76,6 +80,73 @@ function activityDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : activityDateFormatter.format(date);
 }
 
+function activityValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "미입력";
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "없음";
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  if (typeof value === "boolean") return value ? "예" : "아니요";
+  return String(value);
+}
+
+function activityList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+}
+
+function activityNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function activityMoney(value: unknown) {
+  const number = activityNumber(value);
+  return number > 0 ? `${number.toLocaleString("ko-KR")}원` : "전체 금액";
+}
+
+function searchResultCount(resultSummary: Record<string, unknown>) {
+  const total = activityNumber(resultSummary.total);
+  if (total > 0) return total;
+  return Array.isArray(resultSummary.items) ? resultSummary.items.length : 0;
+}
+
+type SearchConditionPreview = {
+  input: string[];
+  selected: string[];
+};
+
+function searchConditionPreview(request: Record<string, unknown>): SearchConditionPreview {
+  const input: string[] = [];
+  const selected: string[] = [];
+  const semanticQuery = String(request.semanticQuery ?? "").trim();
+  const category = String(request.category ?? "").trim();
+  const region = String(request.region ?? "").trim();
+  const maxBudget = activityNumber(request.maxBudget);
+  const closingWithinDays = activityNumber(request.closingWithinDays);
+
+  if (semanticQuery) input.push(semanticQuery);
+  input.push(...activityList(request.includeKeywords));
+  input.push(...activityList(request.excludeKeywords));
+  input.push(...activityList(request.demandAgencies));
+
+  if (category && category !== "전체") selected.push(category);
+  if (region && !["전체 지역", "전체지역"].includes(region)) selected.push(region);
+  if (maxBudget > 0) selected.push(`${activityMoney(maxBudget)} 이하`);
+  if (closingWithinDays > 0) selected.push(`${closingWithinDays}일 이내`);
+  if (request.onlyEligible) selected.push("참가 가능만");
+  else if (request.eligibilityMode === "not_eligible") selected.push("참가 어려움만");
+  if (request.sortMode === "opportunity") selected.push("기회순");
+  else if (request.sortMode === "latest") selected.push("최신순");
+
+  return { input, selected };
+}
+
+function searchTriggerLabel(value: string) {
+  if (value === "ai_button") return "AI로 검색";
+  if (value === "feedback_promoted") return "피드백 기반 저장";
+  return value;
+}
+
 export default function AdminActivityLogsPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [summary, setSummary] = useState({ users: 0, searches: 0, feedback: 0 });
@@ -87,6 +158,7 @@ export default function AdminActivityLogsPage() {
   const [activeView, setActiveView] = useState<ActivityView>("users");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [detailModal, setDetailModal] = useState<ActivityDetailModal | null>(null);
 
   const loadActivityLogs = useCallback(async (view: ActivityView, page: number) => {
     setLoading(true);
@@ -121,6 +193,20 @@ export default function AdminActivityLogsPage() {
   useEffect(() => {
     void loadActivityLogs("users", 1);
   }, [loadActivityLogs]);
+
+  useEffect(() => {
+    if (!detailModal) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailModal(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [detailModal]);
 
   const selectActivityView = (view: ActivityView) => {
     setActiveView(view);
@@ -182,6 +268,7 @@ export default function AdminActivityLogsPage() {
       const targetPage = Math.min(pages.users, lastPage);
       setPages((current) => ({ ...current, searches: 1, feedback: 1 }));
       await loadActivityLogs("users", targetPage);
+      setDetailModal(null);
       setMessage("사용자 활동기록을 삭제했습니다.");
     } catch {
       setMessage("사용자 활동기록을 삭제하지 못했습니다.");
@@ -216,6 +303,21 @@ export default function AdminActivityLogsPage() {
       </main>
     );
   }
+
+  const modalProfile = detailModal?.kind === "user"
+    ? detailModal.user.companyProfile
+    : {};
+  const modalRequest = detailModal?.kind === "search-request"
+    ? detailModal.search.request
+    : {};
+  const modalResult = detailModal?.kind === "search-result"
+    ? detailModal.search.resultSummary
+    : {};
+  const modalResultItems = Array.isArray(modalResult.items)
+    ? modalResult.items.filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === "object",
+    )
+    : [];
 
   return (
     <main className="admin-shell admin-dashboard-shell">
@@ -277,11 +379,7 @@ export default function AdminActivityLogsPage() {
                     <td>{String(user.companyProfile.name ?? "미입력")}</td>
                     <td>{user.aiSearchCount.toLocaleString("ko-KR")}건</td>
                     <td>{user.feedbackCount.toLocaleString("ko-KR")}건</td>
-                    <td><details><summary>상세</summary><div className="admin-activity-detail">
-                      <p>IP 해시: {user.ipHash || "없음"}</p><p>브라우저: {user.userAgent || "없음"}</p>
-                      <pre>{JSON.stringify(user.companyProfile, null, 2)}</pre>
-                      <button type="button" className="delete" onClick={() => void deleteActivityUser(user)}>기록 삭제</button>
-                    </div></details></td>
+                    <td><button type="button" className="admin-activity-view-button" onClick={() => setDetailModal({ kind: "user", user })}>조회관리</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -294,15 +392,38 @@ export default function AdminActivityLogsPage() {
         {activeView === "searches" && (
           <div className="admin-activity-list">
             <div className="admin-activity-table-wrap"><table className="admin-activity-table">
-            <thead><tr><th>순번</th><th>검색일시</th><th>사용자</th><th>저장 구분</th><th>검색조건</th><th>결과 요약</th></tr></thead>
+            <thead><tr><th>순번</th><th>검색일시</th><th>사용자</th><th>저장 구분</th><th>검색조건</th><th>검색결과</th></tr></thead>
             <tbody>{searches.length === 0 ? (
               <tr><td colSpan={6}>{loading ? "검색기록을 조회하고 있습니다." : "저장된 AI 검색기록이 없습니다."}</td></tr>
-            ) : searches.map((search, index) => (
-              <tr key={search.id}><td>{activitySequence("searches", index)}</td><td>{activityDate(search.createdAt)}</td><td>{search.sessionLabel}</td><td>{search.trigger}</td>
-                <td><details><summary>{String(search.request.semanticQuery || "상세조건 검색")}</summary><pre>{JSON.stringify(search.request, null, 2)}</pre></details></td>
-                <td><details><summary>{Number(search.resultSummary.total ?? 0).toLocaleString("ko-KR")}건</summary><pre>{JSON.stringify(search.resultSummary, null, 2)}</pre></details></td>
-              </tr>
-            ))}</tbody>
+            ) : searches.map((search, index) => {
+              const conditionPreview = searchConditionPreview(search.request);
+              const conditionValues = [...conditionPreview.input, ...conditionPreview.selected];
+              return (
+                <tr key={search.id}><td>{activitySequence("searches", index)}</td><td>{activityDate(search.createdAt)}</td><td>{search.sessionLabel}</td><td>{search.trigger}</td>
+                  <td>
+                    {conditionValues.length > 0 ? (
+                      <button
+                        type="button"
+                        className="admin-activity-condition-values"
+                        title={conditionValues.join(" · ")}
+                        onClick={() => setDetailModal({ kind: "search-request", search })}
+                      >
+                        {conditionValues.join(" · ")}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="admin-activity-condition-values empty"
+                        onClick={() => setDetailModal({ kind: "search-request", search })}
+                      >
+                        전체 조건
+                      </button>
+                    )}
+                  </td>
+                  <td><button type="button" className="admin-activity-view-button" onClick={() => setDetailModal({ kind: "search-result", search })}>공고 요약 {searchResultCount(search.resultSummary).toLocaleString("ko-KR")}건</button></td>
+                </tr>
+              );
+            })}</tbody>
             </table></div>
             {renderPagination("searches")}
           </div>
@@ -323,6 +444,188 @@ export default function AdminActivityLogsPage() {
           </div>
         )}
       </section>
+
+      {detailModal && (
+        <div
+          className="admin-activity-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDetailModal(null);
+          }}
+        >
+          <section
+            className="admin-activity-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-activity-modal-title"
+          >
+            <header>
+              <div>
+                <span className="admin-kicker">DATABASE ACTIVITY DETAIL</span>
+                <h2 id="admin-activity-modal-title">
+                  {detailModal.kind === "user"
+                    ? "사용자·기업프로필 조회관리"
+                    : detailModal.kind === "search-request"
+                      ? "AI 검색조건"
+                      : "AI 검색결과 요약"}
+                </h2>
+              </div>
+              <button type="button" className="admin-activity-modal-close" aria-label="팝업 닫기" onClick={() => setDetailModal(null)} autoFocus>×</button>
+            </header>
+
+            <div className="admin-activity-modal-content">
+              {detailModal.kind === "user" ? (
+                <>
+                  <div className="admin-activity-modal-identity">
+                    <span>{String(modalProfile.name || "미").slice(0, 1)}</span>
+                    <div><strong>{String(modalProfile.name || "기업명 미입력")}</strong><small>{detailModal.user.sessionLabel} · 최근 활동 {activityDate(detailModal.user.lastSeenAt)}</small></div>
+                  </div>
+                  <div className="admin-activity-modal-metrics three">
+                    <article><span>프로필 완성도</span><strong>{activityNumber(modalProfile.completion)}<em>%</em></strong></article>
+                    <article><span>AI 검색</span><strong>{detailModal.user.aiSearchCount.toLocaleString("ko-KR")}<em>건</em></strong></article>
+                    <article><span>추천 피드백</span><strong>{detailModal.user.feedbackCount.toLocaleString("ko-KR")}<em>건</em></strong></article>
+                  </div>
+
+                  <section className="admin-activity-modal-section">
+                    <h3>기업 기본정보</h3>
+                    <dl className="admin-activity-modal-fields">
+                      <div><dt>소재지</dt><dd>{activityValue(modalProfile.location)}</dd></div>
+                      <div><dt>기업규모</dt><dd>{activityValue(modalProfile.size)}</dd></div>
+                      <div><dt>희망 최대 사업금액</dt><dd>{activityMoney(modalProfile.preferredMaxBudget)}</dd></div>
+                      <div><dt>최초 활동</dt><dd>{activityDate(detailModal.user.firstSeenAt)}</dd></div>
+                    </dl>
+                  </section>
+
+                  {[
+                    ["보유 면허·자격", activityList(modalProfile.licenses)],
+                    ["보유 기술", activityList(modalProfile.technologies)],
+                    ["주요 사업분야", activityList(modalProfile.businessAreas)],
+                    ["수행 경험", activityList(modalProfile.experiences)],
+                    ["수행 가능 지역", activityList(modalProfile.serviceRegions)],
+                    ["수행 가능 기관유형", activityList(modalProfile.serviceAgencyTypes)],
+                    ["제외 사업분야", activityList(modalProfile.excludedBusinessAreas)],
+                  ].map(([label, values]) => (
+                    <section className="admin-activity-tag-section" key={String(label)}>
+                      <h3>{String(label)}</h3>
+                      <div className="admin-activity-tags">
+                        {(values as string[]).length > 0
+                          ? (values as string[]).map((value) => <span key={value}>{value}</span>)
+                          : <small>등록된 정보가 없습니다.</small>}
+                      </div>
+                    </section>
+                  ))}
+
+                  <details className="admin-activity-modal-raw connection">
+                    <summary>접속정보 보기</summary>
+                    <dl className="admin-activity-modal-fields">
+                      <div><dt>IP 해시</dt><dd>{detailModal.user.ipHash || "없음"}</dd></div>
+                      <div className="wide"><dt>브라우저</dt><dd>{detailModal.user.userAgent || "없음"}</dd></div>
+                    </dl>
+                  </details>
+                </>
+              ) : detailModal.kind === "search-request" ? (
+                <>
+                  <div className="admin-activity-search-heading">
+                    <span>검색조건 상세</span>
+                    <strong>입력 조건과 선택 조건</strong>
+                    <small>{detailModal.search.sessionLabel} · {activityDate(detailModal.search.createdAt)} · {searchTriggerLabel(detailModal.search.trigger)}</small>
+                  </div>
+                  <div className="admin-activity-condition-groups">
+                    <section className="admin-activity-condition-group selected">
+                      <div className="admin-activity-condition-group-head">
+                        <span>항목 선택</span>
+                        <div><h3>선택한 상세조건</h3><p>버튼과 선택 목록에서 지정한 검색 범위입니다.</p></div>
+                      </div>
+                      <dl className="admin-activity-selected-conditions">
+                        <div><dt>업무구분</dt><dd>{String(modalRequest.category || "전체")}</dd></div>
+                        <div><dt>수행지역</dt><dd>{String(modalRequest.region || "전체 지역")}</dd></div>
+                        <div><dt>최대 사업금액</dt><dd>{activityMoney(modalRequest.maxBudget)}</dd></div>
+                        <div><dt>마감기간</dt><dd>{activityNumber(modalRequest.closingWithinDays) > 0 ? `${activityNumber(modalRequest.closingWithinDays)}일 이내` : "전체"}</dd></div>
+                        <div><dt>참가 가능 여부</dt><dd>{modalRequest.onlyEligible ? "참가 가능만" : modalRequest.eligibilityMode === "not_eligible" ? "참가 어려움만" : "전체"}</dd></div>
+                        <div><dt>정렬방식</dt><dd>{modalRequest.sortMode === "opportunity" ? "기회순" : modalRequest.sortMode === "latest" ? "최신순" : "기본 정렬"}</dd></div>
+                      </dl>
+                    </section>
+
+                    <section className="admin-activity-condition-group input">
+                      <div className="admin-activity-condition-group-head">
+                        <span>직접 입력</span>
+                        <div><h3>입력한 검색조건</h3><p>사용자가 검색창과 입력창에 직접 작성한 내용입니다.</p></div>
+                      </div>
+                      <div className="admin-activity-input-condition query">
+                        <strong>AI 검색어</strong>
+                        <p>{String(modalRequest.semanticQuery || "입력값 없음")}</p>
+                      </div>
+                      {[
+                        ["포함키워드", activityList(modalRequest.includeKeywords), "include"],
+                        ["제외키워드", activityList(modalRequest.excludeKeywords), "exclude"],
+                        ["수요기관명", activityList(modalRequest.demandAgencies), "agency"],
+                      ].map(([label, values, tone]) => (
+                        <div className="admin-activity-input-condition" key={String(label)}>
+                          <strong>{String(label)}</strong>
+                          <div className={`admin-activity-tags ${tone}`}>
+                            {(values as string[]).length > 0
+                              ? (values as string[]).map((value) => <span key={value}>{value}</span>)
+                              : <small>입력값 없음</small>}
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+
+                  </div>
+                  <details className="admin-activity-modal-raw">
+                    <summary>개발정보 보기</summary>
+                    <pre>{JSON.stringify(modalRequest, null, 2)}</pre>
+                  </details>
+                </>
+              ) : (
+                <>
+                  <div className="admin-activity-search-heading result">
+                    <span>검색결과</span>
+                    <strong>{detailModal.search.sessionLabel} 사용자의 AI 검색</strong>
+                    <small>{activityDate(detailModal.search.createdAt)} · {searchTriggerLabel(detailModal.search.trigger)}</small>
+                  </div>
+                  <div className="admin-activity-modal-metrics four result">
+                    <article><span>검색 결과</span><strong>{activityNumber(modalResult.total).toLocaleString("ko-KR")}<em>건</em></strong></article>
+                    <article><span>참가 가능</span><strong>{activityNumber(modalResult.eligibleTotal).toLocaleString("ko-KR")}<em>건</em></strong></article>
+                    <article><span>마감 임박</span><strong>{activityNumber(modalResult.closingSoonTotal).toLocaleString("ko-KR")}<em>건</em></strong></article>
+                    <article><span>평균 적합도</span><strong>{activityNumber(modalResult.averageScore).toLocaleString("ko-KR")}<em>점</em></strong></article>
+                  </div>
+                  <div className="admin-activity-result-meta">
+                    <span>전체 DB <strong>{activityNumber(modalResult.databaseTotal).toLocaleString("ko-KR")}건</strong></span>
+                    <span>검색 처리시간 <strong>{activityNumber(modalResult.elapsedMs).toLocaleString("ko-KR")}ms</strong></span>
+                    <span>저장 공고 <strong>{modalResultItems.length.toLocaleString("ko-KR")}건</strong></span>
+                  </div>
+                  <section className="admin-activity-modal-section result-items">
+                    <h3>추천 공고 요약</h3>
+                    {modalResultItems.length > 0 ? (
+                      <div className="admin-activity-result-table-wrap">
+                        <table className="admin-activity-result-table">
+                          <thead><tr><th>공고명</th><th>수요기관</th><th>적합도</th><th>참가판정</th></tr></thead>
+                          <tbody>{modalResultItems.map((item, index) => (
+                            <tr key={String(item.bidId || item.noticeNo || index)}>
+                              <td><strong>{String(item.title || "공고명 없음")}</strong><small>{String(item.noticeNo || "")}</small></td>
+                              <td>{String(item.demandAgency || "미입력")}</td>
+                              <td><span className="admin-activity-score">{activityNumber(item.score)}점</span></td>
+                              <td><span className={`admin-activity-eligibility ${item.eligibility === "참가 가능" ? "eligible" : ""}`}>{String(item.eligibility || "확인 필요")}</span></td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    ) : <p className="admin-activity-empty">저장된 추천 공고 요약이 없습니다.</p>}
+                  </section>
+                  <details className="admin-activity-modal-raw">
+                    <summary>개발정보 보기</summary>
+                    <pre>{JSON.stringify(modalResult, null, 2)}</pre>
+                  </details>
+                </>
+              )}
+            </div>
+            <footer className="admin-activity-modal-footer">
+              {detailModal.kind === "user" && <button type="button" className="admin-activity-modal-delete" disabled={loading} onClick={() => void deleteActivityUser(detailModal.user)}>사용자 기록 삭제</button>}
+              <button type="button" className="admin-activity-modal-done" onClick={() => setDetailModal(null)}>닫기</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
