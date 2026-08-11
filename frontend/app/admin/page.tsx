@@ -298,6 +298,7 @@ export default function AdminPage() {
         <nav className="admin-tabs" aria-label="관리자 메뉴">
           <a className="active" href="/admin" aria-current="page">운영 관리</a>
           <a href="/admin/activity-logs">DB 활동로그</a>
+          <a href="/admin/demand-agencies">수요기관 관리</a>
         </nav>
         <div>
           <button

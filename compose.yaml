@@ -24,7 +24,7 @@ services:
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
-      FINDBID_ADMIN_PASSWORD: ${FINDBID_ADMIN_PASSWORD:-findbid2026}
+      FINDBID_ADMIN_PASSWORD: ${FINDBID_ADMIN_PASSWORD:?FINDBID_ADMIN_PASSWORD is required}
     depends_on:
       backend:
         condition: service_healthy
@@ -62,7 +62,8 @@ services:
       OPENSEARCH_URL: http://opensearch:9200
       S3_ENDPOINT: http://minio:9000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
-      ADMIN_PASSWORD: ${FINDBID_ADMIN_PASSWORD:-findbid2026}
+      G2B_API_KEY: ${G2B_API_KEY:-}
+      DEMAND_AGENCY_SYNC_ENABLED: ${DEMAND_AGENCY_SYNC_ENABLED:-true}
       DEMO_MODE: ${DEMO_MODE:-true}
       SEMANTIC_SEARCH_ENABLED: ${SEMANTIC_SEARCH_ENABLED:-true}
       SEMANTIC_MODEL_NAME: ${SEMANTIC_MODEL_NAME:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
@@ -112,6 +113,7 @@ services:
       BACKEND_INTERNAL_URL: http://backend:8000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
       G2B_SERVICE_KEY: ${G2B_SERVICE_KEY:-}
+      G2B_API_KEY: ${G2B_API_KEY:-}
       DEMO_MODE: ${DEMO_MODE:-true}
       COLLECT_INTERVAL_SECONDS: ${COLLECT_INTERVAL_SECONDS:-600}
     depends_on:

@@ -379,13 +379,14 @@ test("검색 상세조건 아래에 Trander AI 분석 배너를 제공한다", a
 });
 
 test("익명 세션 추천 피드백과 비밀번호 관리페이지를 제공한다", async () => {
-  const [page, adminPage, searchRoute, feedbackRoute, adminAuth, css] = await Promise.all([
+  const [page, adminPage, searchRoute, feedbackRoute, adminAuth, css, compose] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/search/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/feedback/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/admin-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../../compose.yaml", import.meta.url), "utf8"),
   ]);
 
   assert.match(searchRoute, /anonymousSession\(request\)/);
@@ -414,7 +415,11 @@ test("익명 세션 추천 피드백과 비밀번호 관리페이지를 제공�
   assert.match(adminPage, /\/api\/admin\/status/);
   assert.match(adminPage, /운영정보 새로고침/);
   assert.match(adminPage, /Promise\.all\(\[loadStatus\(\), loadNotifications\(\)\]\)/);
-  assert.match(adminAuth, /process\.env\.FINDBID_ADMIN_PASSWORD \?\? "findbid2026"/);
+  assert.match(adminAuth, /process\.env\.FINDBID_ADMIN_PASSWORD\?\.trim\(\)/);
+  assert.match(adminAuth, /FINDBID_ADMIN_PASSWORD 환경변수가 설정되지 않았습니다/);
+  assert.doesNotMatch(adminAuth, /findbid2026/);
+  assert.match(compose, /FINDBID_ADMIN_PASSWORD: \$\{FINDBID_ADMIN_PASSWORD:\?FINDBID_ADMIN_PASSWORD is required\}/);
+  assert.doesNotMatch(compose, /^\s+ADMIN_PASSWORD:/m);
   assert.match(adminAuth, /HttpOnly/);
   assert.match(adminAuth, /SameSite=Strict/);
   assert.match(css, /\.app-shell \.bid-feedback/);
@@ -600,6 +605,55 @@ test("관리페이지에서 DB 사용자 검색 피드백 기록을 조회하고
   assert.match(css, /\.admin-activity-condition-values/);
   assert.match(css, /\.admin-activity-condition-values:hover/);
   assert.match(css, /\.admin-activity-condition-group-head\s*\{[\s\S]*?align-items: center;/);
+});
+
+test("관리페이지에서 나라장터 수요기관을 매일 동기화하고 조회한다", async () => {
+  const [adminPage, activityPage, agencyPage, listRoute, syncRoute, css] = await Promise.all([
+    readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/activity-logs/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/demand-agencies/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/demand-agencies/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/demand-agencies/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(adminPage, /href="\/admin\/demand-agencies">수요기관 관리/);
+  assert.match(activityPage, /href="\/admin\/demand-agencies">수요기관 관리/);
+  assert.match(agencyPage, /나라장터 수요기관 관리/);
+  assert.match(agencyPage, /하루 한 번 최신 기관 변경정보/);
+  assert.doesNotMatch(agencyPage, /최신 수요기관 가져오기/);
+  assert.match(agencyPage, /수요기관 정보 가져오기/);
+  assert.match(agencyPage, /completedToday\(latestSuccess\) \? "오늘 동기화 완료" : "최근 완료"/);
+  assert.match(agencyPage, /window\.confirm\("최근 7일의 수요기관 등록·변경 정보를 다시 가져오시겠습니까\?"\)/);
+  assert.match(agencyPage, /\/api\/admin\/demand-agencies\/sync\?force=true/);
+  assert.match(agencyPage, /관리자 강제 실행/);
+  assert.match(agencyPage, /const \[syncMessageRunId, setSyncMessageRunId\] = useState<number \| null>\(null\)/);
+  assert.match(agencyPage, /data\.sync\.history\.find\(\(item\) => item\.id === syncMessageRunId\)/);
+  assert.match(agencyPage, /run && run\.status !== "running"/);
+  assert.match(agencyPage, /setMessage\(""\)/);
+  assert.match(agencyPage, /기관명·기관코드·최상위기관 검색/);
+  assert.match(agencyPage, /기관종류/);
+  assert.match(agencyPage, /기관세부유형/);
+  assert.match(agencyPage, /동기화 실행 이력/);
+  assert.match(agencyPage, /window\.setInterval\(\(\) => void loadAgencies\(\), 3000\)/);
+  assert.match(agencyPage, /const PAGE_JUMP = 5/);
+  assert.match(agencyPage, /Math\.max\(1, page - PAGE_JUMP\)/);
+  assert.match(agencyPage, /Math\.min\(data\.pagination\.totalPages, page \+ PAGE_JUMP\)/);
+  assert.match(agencyPage, />페이지 시작<\/button>/);
+  assert.match(agencyPage, />이전 5페이지<\/button>/);
+  assert.match(agencyPage, />다음 5페이지<\/button>/);
+  assert.match(agencyPage, />페이지 끝<\/button>/);
+  assert.match(listRoute, /\/api\/v1\/admin\/demand-agencies\?\$\{query\}/);
+  assert.match(listRoute, /isAdminAuthenticated/);
+  assert.match(syncRoute, /method: "POST"/);
+  assert.match(syncRoute, /\/api\/v1\/admin\/demand-agencies\/sync\?force=\$\{force\}/);
+  assert.match(css, /\.admin-agency-metrics/);
+  assert.match(css, /\.admin-agency-table-wrap/);
+  assert.match(css, /\.admin-sync-status\.running/);
+  assert.equal((agencyPage.match(/className="admin-agency-import-button"/g) ?? []).length, 1);
+  assert.match(css, /\.admin-agency-import-button\s*\{[\s\S]*?background:\s*#2869e6;[\s\S]*?border-radius:\s*10px;[\s\S]*?min-height:\s*42px/);
+  assert.doesNotMatch(css, /\.admin-agency-force-sync-button/);
+  assert.match(css, /\.admin-agency-list-card > \.admin-activity-pagination\s*\{[\s\S]*?margin-bottom:\s*24px/);
 });
 
 test("검색 과정과 처리시간을 펼쳐서 확인할 수 있다", async () => {

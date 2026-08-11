@@ -85,10 +85,16 @@ docker compose --profile full up --build -d
 
 ```dotenv
 DEMO_MODE=false
-G2B_SERVICE_KEY=발급받은_일반_인증키
+G2B_API_KEY=발급받은_일반_인증키
 ```
 
 수집기는 물품·용역·공사·외자 API를 주기적으로 조회하고 표준 공고 모델로 변환해 백엔드에 저장합니다. 인증키가 없으면 수집기는 데모 모드로 대기하고 백엔드는 초기 데모 데이터를 제공합니다.
+
+백엔드는 서버가 실행될 때 나라장터 수요기관의 등록·변경 정보를 확인하고 하루 한 번
+로컬 `demand_agencies` 테이블에 반영합니다. 관리자 페이지의 `수요기관 관리` 메뉴에서
+동기화 상태와 실행 이력을 확인하고, 당일 자동 실행 전에는 수동으로 가져오기를 시작할
+수 있습니다. 날짜 조회는 최근 7일을 중복 조회한 뒤 기관코드로 병합하여 지연 반영과
+기관 변경·삭제 정보의 누락을 방지합니다.
 
 ## 주요 API
 
@@ -100,6 +106,8 @@ GET  /api/v1/bids/{bid_id}
 GET  /api/v1/bids/{bid_id}/eligibility
 GET  /api/v1/company/profile
 POST /api/v1/admin/bids/import
+GET  /api/v1/admin/demand-agencies
+POST /api/v1/admin/demand-agencies/sync
 ```
 
 ## 테스트

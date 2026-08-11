@@ -18,7 +18,7 @@ class CollectorScheduler:
         self.client = G2BClient()
 
     async def collect_once(self) -> int:
-        if not self.settings.g2b_service_key:
+        if not (self.settings.g2b_service_key or self.settings.g2b_api_key):
             logger.info("나라장터 인증키가 없어 데모 모드로 대기합니다.")
             return 0
         records = []

@@ -3,7 +3,11 @@ const ADMIN_SESSION_SECONDS = 14400;
 const textEncoder = new TextEncoder();
 
 export function adminPassword(): string {
-  return process.env.FINDBID_ADMIN_PASSWORD ?? "findbid2026";
+  const password = process.env.FINDBID_ADMIN_PASSWORD?.trim();
+  if (!password) {
+    throw new Error("FINDBID_ADMIN_PASSWORD 환경변수가 설정되지 않았습니다.");
+  }
+  return password;
 }
 
 function cookieValue(request: Request, name: string): string {

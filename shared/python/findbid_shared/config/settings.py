@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     s3_access_key: str = "findbid"
     s3_secret_key: str = "findbid-storage"
     g2b_service_key: str = ""
+    g2b_api_key: str = ""
     internal_api_key: str = "change-this-in-production"
     backend_internal_url: str = "http://backend:8000"
     demo_mode: bool = True
@@ -29,7 +30,13 @@ class Settings(BaseSettings):
     search_trace_enabled: bool = True
     feedback_session_ttl_seconds: int = 7200
     feedback_adjustment_limit: int = 10
-    admin_password: str = "findbid2026"
+    demand_agency_sync_enabled: bool = True
+    demand_agency_sync_page_size: int = 500
+    demand_agency_sync_timeout_seconds: float = 30.0
+    demand_agency_sync_window_days: int = 31
+    demand_agency_sync_overlap_days: int = 7
+    demand_agency_sync_initial_date: str = "190001010000"
+    demand_agency_sync_check_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",

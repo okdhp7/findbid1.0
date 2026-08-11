@@ -49,6 +49,7 @@ def initialize_database(retries: int = 20, interval_seconds: float = 1.5) -> Non
         UserActivitySession,
     )
     from app.models.bid import BidNotice
+    from app.models.demand_agency import DemandAgency, DemandAgencySyncRun
     from app.models.notification import NotificationPost
     from app.models.semantic_embedding import BidSemanticEmbedding
 
@@ -57,6 +58,8 @@ def initialize_database(retries: int = 20, interval_seconds: float = 1.5) -> Non
         BidNotice,
         BidSemanticEmbedding,
         CompanyProfileSnapshot,
+        DemandAgency,
+        DemandAgencySyncRun,
         NotificationPost,
         RecommendationFeedbackLog,
         SearchActivityLog,

@@ -6,8 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.feedback import feedback_store
-from app.repositories import ActivityLogRepository, BidRepository
+from app.repositories import ActivityLogRepository, BidRepository, DemandAgencyRepository
 from app.repositories.notification_repository import NotificationRepository
+from app.services.demand_agency_sync import (
+    DemandAgencySyncAlreadyDone,
+    DemandAgencySyncError,
+    DemandAgencySyncRunning,
+    demand_agency_sync_manager,
+)
 from findbid_shared.config import get_settings
 from findbid_shared.schemas import BidRecord
 
@@ -93,6 +99,55 @@ def delete_activity_user(
         session_hash
     ):
         raise HTTPException(status_code=404, detail="사용자 활동기록을 찾을 수 없습니다.")
+
+
+@router.get("/admin/demand-agencies")
+def list_demand_agencies(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, alias="pageSize", ge=1, le=100),
+    query: str = Query(default="", alias="q", max_length=200),
+    jurisdiction_type: str = Query(default="", alias="jurisdictionType", max_length=100),
+    detail_type: str = Query(default="", alias="detailType", max_length=150),
+    agency_status: Literal["active", "deleted", "all"] = Query(
+        default="active", alias="status"
+    ),
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    return DemandAgencyRepository(session).admin_list(
+        page=page,
+        page_size=page_size,
+        query=query,
+        jurisdiction_type=jurisdiction_type,
+        detail_type=detail_type,
+        agency_status=agency_status,
+    )
+
+
+@router.post("/admin/demand-agencies/sync", status_code=202)
+def start_demand_agency_sync(
+    force: bool = Query(default=False),
+    x_internal_key: str = Header(default=""),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    try:
+        run = demand_agency_sync_manager().start(
+            "admin_force" if force else "admin",
+            force=force,
+        )
+    except DemandAgencySyncAlreadyDone as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except DemandAgencySyncRunning as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except DemandAgencySyncError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    message = (
+        "수요기관 정보 강제 가져오기를 시작했습니다."
+        if force
+        else "수요기관 정보 가져오기를 시작했습니다."
+    )
+    return {"message": message, "run": run}
 
 
 @router.get("/admin/notifications")
