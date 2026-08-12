@@ -2045,7 +2045,7 @@ export default function Home() {
           </div>
           <h1>
             우리 회사에 맞는 입찰,<br />
-            <span>AI가 먼저 찾아드립니다.</span>
+            <span>AI가 먼저 찾아드립니다!</span>
           </h1>
           <p>
             인공지능이 검색 의도를 분석해 최적의 입찰공고를 탐색하여 분석정보와 함께 제공합니다.
