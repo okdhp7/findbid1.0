@@ -87,7 +87,7 @@ export function SiteFooter() {
           <div className="site-footer-meta">
             <small>© 2026 INTERWEB. All rights reserved.</small>
             <small className="site-footer-release">
-              FindBid v{APP_VERSION} · {formatReleasedAt(RELEASED_AT)} {RELEASE_LABEL}
+              Ver. {APP_VERSION} · {formatReleasedAt(RELEASED_AT)} {RELEASE_LABEL}
             </small>
           </div>
         </div>
