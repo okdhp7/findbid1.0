@@ -2715,12 +2715,27 @@ html[data-findbid-theme="light"] .app-shell {
 }
 
 .app-shell .site-footer-inner {
-  align-items: flex-start;
   display: flex;
-  gap: 48px;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 12px;
   margin: 0 auto;
   max-width: 1280px;
+}
+
+.app-shell .site-footer-top,
+.app-shell .site-footer-bottom {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.app-shell .site-footer-top {
+  gap: 48px;
+}
+
+.app-shell .site-footer-bottom {
+  align-items: baseline;
+  gap: 24px;
 }
 
 .app-shell .site-footer-brand {
@@ -2738,20 +2753,16 @@ html[data-findbid-theme="light"] .app-shell {
   margin: 5px 0 12px;
 }
 
-.app-shell .site-footer-brand small {
+.app-shell .site-footer-bottom small {
   color: var(--dim);
   font-size: 11px;
 }
 
-.app-shell .site-footer-meta {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 12px;
-}
-
 .app-shell .site-footer-release {
+  color: var(--dim);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -7897,6 +7908,10 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
   }
 
   .app-shell .site-footer-inner {
+    gap: 24px;
+  }
+
+  .app-shell .site-footer-top {
     flex-direction: column;
     gap: 24px;
   }
@@ -7905,6 +7920,11 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: stretch;
+    width: 100%;
+  }
+
+  .app-shell .site-footer-bottom {
+    align-items: flex-end;
     width: 100%;
   }
 

@@ -1063,7 +1063,8 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
   assert.match(home, /<SiteFooter \/>/);
   assert.match(insights, /<SiteFooter \/>/);
   assert.match(footer, /© 2026 INTERWEB\. All rights reserved\./);
-  assert.match(footer, /FindBid v\{APP_VERSION\}/);
+  assert.match(footer, /Ver\. \{APP_VERSION\}/);
+  assert.match(footer, /className="site-footer-bottom"[\s\S]*?All rights reserved[\s\S]*?className="site-footer-release"/);
   assert.match(footer, /const RELEASED_AT = packageJson\.releaseDate/);
   assert.match(footer, /process\.env\.NODE_ENV === "production" \? "Rel" : "Dev"/);
   assert.match(footer, /localDateTime/);
@@ -1095,6 +1096,7 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
   assert.match(terms, /추천 입찰공고는 현재 제공된 정보에 근거하여 AI가 분석한 결과를 기반으로 제공되며, 실제 입찰 결과와 다를 수 있습니다/);
   assert.match(css, /\.app-shell \.site-footer/);
   assert.match(css, /\.app-shell \.site-footer-release/);
+  assert.match(css, /\.app-shell \.site-footer-bottom\s*\{[\s\S]*?align-items:\s*baseline/);
   assert.match(css, /\.app-shell \.site-footer-contact-row button/);
   assert.match(footer, /className="site-footer-contact-row"/);
   assert.match(css, /\.app-shell \.site-footer-contact-row\s*\{[\s\S]*?align-items:\s*center/);
