@@ -2743,6 +2743,18 @@ html[data-findbid-theme="light"] .app-shell {
   font-size: 11px;
 }
 
+.app-shell .site-footer-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+}
+
+.app-shell .site-footer-release {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .app-shell .site-footer-links {
   align-items: flex-start;
   display: flex;
@@ -3989,7 +4001,7 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
   padding: 0 2px;
 }
 
-.app-shell .result-list-end {
+.app-shell .footer-scroll-end {
   height: 1px;
   scroll-margin-bottom: 24px;
 }

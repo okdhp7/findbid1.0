@@ -728,7 +728,7 @@ function Toggle({
 }
 
 export default function Home() {
-  const resultBottomRef = useRef<HTMLDivElement>(null);
+  const footerBottomRef = useRef<HTMLDivElement>(null);
   const semanticHistoryRef = useRef<HTMLDivElement>(null);
   const autoSearchTimerRef = useRef<number | null>(null);
   const searchAbortControllerRef = useRef<AbortController | null>(null);
@@ -1550,9 +1550,9 @@ export default function Home() {
   };
 
   const scrollToResultBottom = () => {
-    if (!resultBottomRef.current) return;
+    if (!footerBottomRef.current) return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    resultBottomRef.current.scrollIntoView({
+    footerBottomRef.current.scrollIntoView({
       behavior: reduceMotion ? "auto" : "smooth",
       block: "end",
     });
@@ -3024,8 +3024,6 @@ export default function Home() {
             </nav>
           )}
 
-          <div className="result-list-end" ref={resultBottomRef} aria-hidden="true" />
-
           {searched && filteredBids.length > 0 && (
             <div className="result-scroll-controls" aria-label="공고 목록 빠른 이동">
               <button
@@ -4014,6 +4012,7 @@ export default function Home() {
       )}
 
       <SiteFooter />
+      <div className="footer-scroll-end" ref={footerBottomRef} aria-hidden="true" />
 
       {/* ── Mobile Dock ── */}
       <nav className="mobile-dock has-notifications" aria-label="모바일 주요 메뉴">

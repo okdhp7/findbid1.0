@@ -1,6 +1,7 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "../.openai/hosting.json";
+import packageJson from "./package.json";
 import { sites } from "./build/sites-vite-plugin";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
@@ -12,6 +13,10 @@ const { d1, r2 } = hostingConfig;
 const usePolling =
   process.env.CODEX_SANDBOX === "seatbelt" || process.env.VITE_USE_POLLING === "true";
 const developmentHost = process.env.VITE_DEV_HOST;
+
+if (Number.isNaN(Date.parse(packageJson.releaseDate))) {
+  throw new Error("package.json의 releaseDate는 유효한 ISO 8601 일시여야 합니다.");
+}
 
 const localBindingConfig = {
   main: "./worker/index.ts",

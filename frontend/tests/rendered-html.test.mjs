@@ -45,8 +45,9 @@ test("페이지 최상단과 공고 목록 하단 이동 기능을 제공한다"
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /resultBottomRef/);
+  assert.match(page, /footerBottomRef/);
   assert.match(page, /scrollIntoView/);
+  assert.match(page, /<SiteFooter \/>[\s\S]*?ref=\{footerBottomRef\}/);
   assert.match(page, /window\.scrollTo\(\{[\s\S]*?top:\s*0/);
   assert.match(page, /페이지 최상단으로 이동/);
   assert.match(page, /공고 목록 하단으로 이동/);
@@ -1046,7 +1047,7 @@ test("알림 메뉴는 관리자 게시물과 연결된 접근 가능한 팝업�
 });
 
 test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", async () => {
-  const [home, insights, footer, about, privacy, terms, css] = await Promise.all([
+  const [home, insights, footer, about, privacy, terms, css, viteConfig, nextConfig, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/insights/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_components/site-footer.tsx", import.meta.url), "utf8"),
@@ -1054,11 +1055,23 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
     readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/terms/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(home, /<SiteFooter \/>/);
   assert.match(insights, /<SiteFooter \/>/);
   assert.match(footer, /© 2026 INTERWEB\. All rights reserved\./);
+  assert.match(footer, /FindBid v\{APP_VERSION\}/);
+  assert.match(footer, /const RELEASED_AT = packageJson\.releaseDate/);
+  assert.match(footer, /process\.env\.NODE_ENV === "production" \? "Rel" : "Dev"/);
+  assert.match(footer, /localDateTime/);
+  assert.doesNotMatch(nextConfig, /NEXT_PUBLIC_FINDBID_RELEASED_AT/);
+  assert.doesNotMatch(viteConfig, /NEXT_PUBLIC_FINDBID_RELEASED_AT/);
+  const packageMetadata = JSON.parse(packageJson);
+  assert.equal(typeof packageMetadata.version, "string");
+  assert.equal(Number.isNaN(Date.parse(packageMetadata.releaseDate)), false);
   assert.match(footer, /href="\/about"/);
   assert.match(footer, /href="\/privacy"/);
   assert.match(footer, /href="\/terms"/);
@@ -1081,6 +1094,7 @@ test("공통 Footer와 세 개의 공개 안내 페이지를 제공한다", asyn
   assert.match(terms, /이용약관 \| FindBid/);
   assert.match(terms, /추천 입찰공고는 현재 제공된 정보에 근거하여 AI가 분석한 결과를 기반으로 제공되며, 실제 입찰 결과와 다를 수 있습니다/);
   assert.match(css, /\.app-shell \.site-footer/);
+  assert.match(css, /\.app-shell \.site-footer-release/);
   assert.match(css, /\.app-shell \.site-footer-contact-row button/);
   assert.match(footer, /className="site-footer-contact-row"/);
   assert.match(css, /\.app-shell \.site-footer-contact-row\s*\{[\s\S]*?align-items:\s*center/);

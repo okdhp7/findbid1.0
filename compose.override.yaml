@@ -16,6 +16,7 @@ services:
       - ./frontend/public:/app/frontend/public
       - ./frontend/worker:/app/frontend/worker
       - ./frontend/next.config.ts:/app/frontend/next.config.ts:ro
+      - ./frontend/package.json:/app/frontend/package.json:ro
       - ./frontend/postcss.config.mjs:/app/frontend/postcss.config.mjs:ro
       - ./frontend/tsconfig.json:/app/frontend/tsconfig.json:ro
       - ./frontend/vite.config.ts:/app/frontend/vite.config.ts:ro

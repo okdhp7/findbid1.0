@@ -1,8 +1,36 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import packageJson from "../../package.json";
 
 const CUSTOMER_EMAIL = "help_findbid@interweb.co.kr";
+const APP_VERSION = packageJson.version;
+const RELEASED_AT = packageJson.releaseDate;
+const RELEASE_LABEL = process.env.NODE_ENV === "production" ? "Rel" : "Dev";
+
+function formatReleasedAt(value: string): string {
+  const localDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(value);
+  if (localDateTime) {
+    return `${localDateTime[1]}.${localDateTime[2]}.${localDateTime[3]} ${localDateTime[4]}:${localDateTime[5]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "배포 일시 확인 불가";
+
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+
+  return `${part("year")}.${part("month")}.${part("day")} ${part("hour")}:${part("minute")}`;
+}
 
 export function SiteFooter() {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
@@ -56,7 +84,12 @@ export function SiteFooter() {
         <div className="site-footer-brand">
           <strong>FindBid</strong>
           <p>기업 역량에 맞는 공공 입찰 기회를 찾는 AI 입찰 탐색 서비스</p>
-          <small>© 2026 INTERWEB. All rights reserved.</small>
+          <div className="site-footer-meta">
+            <small>© 2026 INTERWEB. All rights reserved.</small>
+            <small className="site-footer-release">
+              FindBid v{APP_VERSION} · {formatReleasedAt(RELEASED_AT)} {RELEASE_LABEL}
+            </small>
+          </div>
         </div>
         <nav className="site-footer-links" aria-label="하단 메뉴">
           <a href="/about">서비스 소개</a>
