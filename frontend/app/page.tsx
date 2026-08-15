@@ -773,7 +773,7 @@ export default function Home() {
   );
   const [sort, setSort] = useState("score");
   const [searched, setSearched] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearching, setIsSearching] = useState(true);
   const [resultBids, setResultBids] = useState<Bid[]>([]);
   const [databaseTotal, setDatabaseTotal] = useState(0);
   const [searchTotal, setSearchTotal] = useState(0);
@@ -2844,18 +2844,28 @@ export default function Home() {
             </div>
           </div>
 
+          {isSearching && (
+            <div
+              className="search-progress-status"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="search-progress-copy">
+                <span className="search-progress-spinner" aria-hidden="true" />
+                <div>
+                  <strong>입찰공고를 분석하고 있습니다</strong>
+                  <span>검색조건을 해석하고 적합한 공고를 찾는 중입니다.</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Bid List */}
           <div
             className={`result-list ${isSearching ? "is-loading" : ""}`}
             aria-busy={isSearching}
           >
-            {!searched ? (
-              <div className="empty-state" role="status">
-                <span>⌕</span>
-                <h3>실제 입찰공고를 불러오는 중입니다</h3>
-                <p>검색조건에 맞는 공고를 데이터베이스에서 조회하고 있습니다.</p>
-              </div>
-            ) : filteredBids.length === 0 ? (
+            {!searched ? null : filteredBids.length === 0 ? (
               <div className="empty-state">
                 <span>⌕</span>
                 <h3>조건에 맞는 공고가 없습니다</h3>

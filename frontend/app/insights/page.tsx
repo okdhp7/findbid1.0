@@ -493,9 +493,20 @@ export default function InsightsPage() {
         </button>
       </section>
 
-      <section className="insights-main" aria-live="polite">
+      <section className="insights-main" aria-live="polite" aria-busy={loading}>
+        {loading && (
+          <div className="search-progress-status" role="status">
+            <div className="search-progress-copy">
+              <span className="search-progress-spinner" aria-hidden="true" />
+              <div>
+                <strong>입찰 인사이트를 분석하고 있습니다</strong>
+                <span>최근 6개월 공고와 기업 맞춤 참여 기회를 분석하는 중입니다.</span>
+              </div>
+            </div>
+          </div>
+        )}
         {error && <div className="insights-error" role="alert">{error}</div>}
-        <div className="insight-dashboard standalone">
+        <div className={`insight-dashboard standalone ${loading ? "is-loading" : ""}`}>
           <div className="insight-dashboard-head">
             <div>
               <span className="section-kicker">MARKET SNAPSHOT</span>
