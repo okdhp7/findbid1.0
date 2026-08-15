@@ -3020,6 +3020,30 @@ html[data-findbid-theme="light"] .app-shell {
   width: 100%;
 }
 
+.app-shell .info-video:fullscreen {
+  background: #000;
+  border-radius: 0;
+  height: 100dvh;
+  max-height: none;
+  max-width: none;
+  object-fit: contain;
+  width: 100vw;
+}
+
+.app-shell .info-video:-webkit-full-screen {
+  background: #000;
+  border-radius: 0;
+  height: 100vh;
+  max-height: none;
+  max-width: none;
+  object-fit: contain;
+  width: 100vw;
+}
+
+.app-shell .info-video::backdrop {
+  background: #000;
+}
+
 .app-shell .info-content h2 {
   color: var(--text);
   font-size: 18px;
