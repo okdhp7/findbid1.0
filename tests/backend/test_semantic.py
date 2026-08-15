@@ -506,6 +506,23 @@ def test_budget_comparison_operators_are_preserved() -> None:
     assert "사업금액: 5억원 이하" not in range_query.conditions
 
 
+def test_korean_composite_budget_units_are_calculated() -> None:
+    plain = analyze_query("사업금액 5천만원")
+    composite = analyze_query("사업금액 2천5백만원 이상")
+    mixed = analyze_query("사업금액 1억5천만원 이하")
+
+    assert plain.min_budget is None
+    assert plain.max_budget == 50_000_000
+    assert plain.free_text_terms == ()
+    assert "사업금액: 5,000만원 이하" in plain.conditions
+    assert composite.min_budget == 25_000_000
+    assert composite.max_budget is None
+    assert "사업금액: 2,500만원 이상" in composite.conditions
+    assert mixed.min_budget is None
+    assert mixed.max_budget == 150_000_000
+    assert "사업금액: 15,000만원 이하" in mixed.conditions
+
+
 def test_attached_budget_operator_is_not_used_as_a_required_keyword() -> None:
     query = (
         "서울 경기에 인공지능 시스템 구축 용역 사업으로 사업금액 "

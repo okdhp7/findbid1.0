@@ -13,12 +13,21 @@ from .regions import find_regions, region_aliases
 
 
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣+#.]+")
+AMOUNT_NUMBER_PATTERN = r"\d+(?:\.\d+)?"
+AMOUNT_MAN_PART_PATTERN = (
+    rf"(?:{AMOUNT_NUMBER_PATTERN}\s*(?:천|백|십)?\s*)+만"
+)
+AMOUNT_EXPRESSION_PATTERN = (
+    rf"(?:{AMOUNT_NUMBER_PATTERN}\s*억"
+    rf"(?:\s*{AMOUNT_MAN_PART_PATTERN})?"
+    rf"|{AMOUNT_MAN_PART_PATTERN})\s*원?"
+)
 AMOUNT_CONDITION_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?\s*(이상|초과|이하|미만)?"
+    rf"({AMOUNT_EXPRESSION_PATTERN})\s*(이상|초과|이하|미만)?"
 )
 AMOUNT_RANGE_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?\s*(?:부터|~|-)\s*"
-    r"(\d+(?:\.\d+)?)\s*(억|만)\s*원?\s*(?:까지)?"
+    rf"({AMOUNT_EXPRESSION_PATTERN})\s*(?:부터|~|-)\s*"
+    rf"({AMOUNT_EXPRESSION_PATTERN})\s*(?:까지)?"
 )
 CLOSING_PATTERN = re.compile(r"(\d+)\s*일\s*(?:이내|내)")
 PARTICIPANT_REGION_PATTERN = re.compile(
@@ -207,9 +216,27 @@ def _infer_purchase_category(text: str) -> str | None:
     return None
 
 
-def _amount_value(number: str, unit: str) -> int:
-    multiplier = 100_000_000 if unit == "억" else 10_000
-    return int(float(number) * multiplier)
+def _man_unit_value(expression: str) -> int:
+    total = 0.0
+    for number, unit in re.findall(
+        rf"({AMOUNT_NUMBER_PATTERN})\s*(천|백|십)?",
+        expression,
+    ):
+        multiplier = {"천": 1_000, "백": 100, "십": 10}.get(unit, 1)
+        total += float(number) * multiplier
+    return int(total * 10_000)
+
+
+def _amount_value(expression: str) -> int:
+    normalized = re.sub(r"\s+", "", expression).removesuffix("원")
+    if "억" not in normalized:
+        return _man_unit_value(normalized.removesuffix("만"))
+
+    billion_part, remainder = normalized.split("억", 1)
+    total = int(float(billion_part) * 100_000_000)
+    if remainder:
+        total += _man_unit_value(remainder.removesuffix("만"))
+    return total
 
 
 def _budget_bounds(
@@ -218,8 +245,8 @@ def _budget_bounds(
     range_match = AMOUNT_RANGE_PATTERN.search(text)
     if range_match:
         return (
-            _amount_value(range_match.group(1), range_match.group(2)),
-            _amount_value(range_match.group(3), range_match.group(4)),
+            _amount_value(range_match.group(1)),
+            _amount_value(range_match.group(2)),
             True,
             True,
         )
@@ -230,8 +257,8 @@ def _budget_bounds(
     maximum_inclusive = True
     matches = list(AMOUNT_CONDITION_PATTERN.finditer(text))
     for match in matches:
-        amount = _amount_value(match.group(1), match.group(2))
-        operator = match.group(3)
+        amount = _amount_value(match.group(1))
+        operator = match.group(2)
         if operator == "이상":
             minimum = amount
             minimum_inclusive = True
@@ -258,8 +285,8 @@ def _budget_label(amount: int) -> str:
 def _is_amount_token(token: str) -> bool:
     return bool(
         re.fullmatch(
-            r"\d+(?:\.\d+)?(?:억|만)?원?"
-            r"(?:(?:이상|이하|초과|미만|부터|까지)[가-힣]*)?",
+            rf"{AMOUNT_EXPRESSION_PATTERN}"
+            rf"(?:(?:이상|이하|초과|미만|부터|까지)[가-힣]*)?",
             token,
         )
     )
