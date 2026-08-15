@@ -1591,10 +1591,12 @@ html[data-findbid-theme="light"] .app-shell {
   border-radius: var(--radius-sm);
   display: flex;
   flex-shrink: 0;
-  font-size: 19px;
-  height: 44px;
+  font-size: 30px;
+  font-weight: 500;
+  height: 56px;
   justify-content: center;
-  width: 44px;
+  line-height: 1;
+  width: 56px;
 }
 
 .app-shell .metric-icon.mint { background: var(--green-soft); color: var(--green); }
@@ -8336,8 +8338,9 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
   }
 
   .app-shell .metric-icon {
-    height: 38px;
-    width: 38px;
+    font-size: 22px;
+    height: 46px;
+    width: 46px;
   }
 
   .app-shell .metrics strong {
