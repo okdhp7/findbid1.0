@@ -13,6 +13,11 @@ type PublicInfoPageProps = {
   kicker: string;
   title: string;
   description: string;
+  video?: {
+    src: string;
+    title: string;
+    description: string;
+  };
   sections: PublicInfoSection[];
 };
 
@@ -20,6 +25,7 @@ export function PublicInfoPage({
   kicker,
   title,
   description,
+  video,
   sections,
 }: PublicInfoPageProps) {
   const [theme, setTheme] = useState<"dark" | "light">("light");
@@ -70,6 +76,34 @@ export function PublicInfoPage({
       </section>
 
       <article className="info-content">
+        {video && (
+          <section className="info-video-section" aria-labelledby="info-video-title">
+            <div className="info-video-copy">
+              <span className="section-kicker">30 SEC PREVIEW</span>
+              <h2 id="info-video-title">{video.title}</h2>
+              <p>{video.description}</p>
+              <a className="info-video-cta" href="/#search">
+                입찰 탐색 시작하기
+                <span aria-hidden="true">→</span>
+              </a>
+            </div>
+            <div className="info-video-frame">
+              <video
+                className="info-video"
+                controls
+                playsInline
+                preload="metadata"
+                aria-label={`${video.title} 소개 영상`}
+              >
+                <source src={video.src} type="video/mp4" />
+                <p>
+                  브라우저가 동영상 재생을 지원하지 않습니다.{" "}
+                  <a href={video.src}>소개 영상 다운로드</a>
+                </p>
+              </video>
+            </div>
+          </section>
+        )}
         {sections.map((section) => (
           <section key={section.title}>
             <h2>{section.title}</h2>

@@ -2949,6 +2949,77 @@ html[data-findbid-theme="light"] .app-shell {
   padding-top: 26px;
 }
 
+.app-shell .info-video-section {
+  align-items: center;
+  display: grid;
+  gap: 44px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  padding: 4px 0 10px;
+}
+
+.app-shell .info-video-copy {
+  max-width: 470px;
+}
+
+.app-shell .info-video-copy h2 {
+  font-size: clamp(26px, 3vw, 34px);
+  letter-spacing: -0.8px;
+  margin: 10px 0 14px;
+}
+
+.app-shell .info-video-copy p {
+  margin: 0;
+}
+
+.app-shell .info-video-cta {
+  align-items: center;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  border-radius: 999px;
+  box-shadow: 0 12px 26px rgba(42, 98, 203, 0.22);
+  color: #fff;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 12px 20px;
+  text-decoration: none;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.app-shell .info-video-cta:hover {
+  box-shadow: 0 16px 32px rgba(42, 98, 203, 0.30);
+  transform: translateY(-2px);
+}
+
+.app-shell .info-video-cta:focus-visible {
+  outline: 3px solid rgba(79, 142, 247, 0.48);
+  outline-offset: 3px;
+}
+
+.app-shell .info-video-frame {
+  background: #08162e;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: 0 24px 54px rgba(8, 22, 46, 0.24);
+  justify-self: center;
+  line-height: 0;
+  max-width: 340px;
+  overflow: hidden;
+  padding: 8px;
+  width: 100%;
+}
+
+.app-shell .info-video {
+  aspect-ratio: 9 / 16;
+  background: #08162e;
+  border-radius: 17px;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
 .app-shell .info-content h2 {
   color: var(--text);
   font-size: 18px;
@@ -7936,6 +8007,25 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
     margin-top: 18px;
     padding: 22px 18px;
     width: calc(100% - 32px);
+  }
+
+  .app-shell .info-video-section {
+    gap: 28px;
+    grid-template-columns: 1fr;
+    padding-top: 0;
+  }
+
+  .app-shell .info-video-copy {
+    max-width: none;
+  }
+
+  .app-shell .info-video-cta {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .app-shell .info-video-frame {
+    max-width: 320px;
   }
 
   .app-shell .insights-hero {

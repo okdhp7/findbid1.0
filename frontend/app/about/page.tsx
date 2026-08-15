@@ -12,6 +12,11 @@ export default function AboutPage() {
       kicker="ABOUT FINDBID"
       title="기업의 다음 입찰 기회를 더 빠르게"
       description="FindBid는 공공 입찰공고와 기업 역량을 연결해 검토할 공고를 빠르게 찾도록 돕습니다."
+      video={{
+        src: "/findbid-service-intro-30s.mp4",
+        title: "30초로 만나는 FindBid",
+        description: "자연어 검색부터 기업 역량 비교와 참가 가능성 분석까지, FindBid가 공공 입찰 기회를 찾는 과정을 영상으로 확인해 보세요.",
+      }}
       sections={[
         {
           title: "FindBid가 하는 일",
