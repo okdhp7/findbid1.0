@@ -118,6 +118,72 @@ POST /api/v1/admin/demand-agencies/sync
 docker compose --profile test run --rm test
 ```
 
+## 운영 배포 (Ubuntu 서버)
+
+IP 직접 접속(TLS 없음) 기준, `full` 프로필(OpenSearch·MinIO 포함) 운영 절차입니다.
+
+1. **서버 준비**: Docker Engine + `docker compose` 플러그인 설치, `docker` 그룹 권한, `systemctl enable docker`. git 원격이 사설망(Tailscale 등)에 있다면 서버도 같은 네트워크에 조인되어야 합니다.
+
+2. **소스 배치**
+
+```bash
+git clone <repo-url> /opt/findbid
+cd /opt/findbid
+```
+
+3. **운영 `.env` 작성**: `.env.example`을 복사한 뒤 `chmod 600 .env`로 보호하고, 아래 값을 실제 운영값으로 채웁니다.
+   - `INTERNAL_API_KEY`, `FINDBID_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `S3_SECRET_KEY`: `openssl rand -hex 32` 등으로 강한 랜덤값 생성
+   - `APP_ENV=production`, `DEMO_MODE=false`, `G2B_SERVICE_KEY=<발급받은 인증키>` (`G2B_API_KEY`는 수요기관 동기화 전용 키가 따로 있을 때만 채우면 되고, 비워두면 `G2B_SERVICE_KEY`를 재사용합니다)
+   - `OPENSEARCH_JAVA_OPTS`: 서버 메모리에 맞게 조정 (예: 32GB 서버는 `-Xms2g -Xmx2g`)
+   - `.env`는 git에 커밋하지 않습니다 (`.gitignore`에 이미 포함됨).
+
+4. **빌드 & 기동** (override 제외, 운영 이미지만)
+
+```bash
+docker compose -f compose.yaml --profile full up --build -d
+docker compose -f compose.yaml --profile full ps
+```
+
+5. **포트 노출**: `compose.yaml`에서 `frontend`(3100)·`backend`(8100)·`postgres`(5432)·`opensearch`(9200)·`minio`(9000/9001) 전부 `127.0.0.1`에만 바인딩되어 도커 컨테이너 자체는 외부에 노출되지 않습니다. 외부 접속은 호스트에 별도 설치한 **nginx**(80/443)가 도메인으로 받아서 frontend로 리버스 프록시합니다.
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+MinIO 콘솔 등 내부 전용 서비스 관리가 필요하면 SSH 터널을 사용합니다: `ssh -L 9001:localhost:9001 <서버>`.
+
+**도메인 + HTTPS (nginx + certbot)**: 도메인의 A 레코드를 서버 IP로 연결한 뒤, 호스트에 nginx를 설치하고 `infrastructure/nginx/findbid.conf`를 참고해 `/etc/nginx/sites-available/`에 배치합니다. 인증서는 `certbot --webroot`로 발급합니다 (nginx 플러그인의 `--nginx` 자동 편집은 멀티 도메인 환경에서 challenge 경로가 앱으로 새는 경우가 있어, webroot 방식을 권장합니다).
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo certbot certonly --webroot -w /var/www/certbot -d <도메인> -d www.<도메인>
+```
+
+인증서 갱신 시 nginx를 reload하도록 훅을 등록합니다.
+
+```bash
+sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh > /dev/null <<'EOF'
+#!/bin/bash
+systemctl reload nginx
+EOF
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+```
+
+nginx 설정과 인증서는 docker compose 스택 밖(호스트)에 있으므로 백업 대상에 `/etc/nginx/sites-available/`와 `/etc/letsencrypt/`도 포함하는 걸 권장합니다.
+
+6. **백업**: `postgres`와 `minio` 볼륨을 매일 백업하는 cron 스크립트를 등록합니다 (`pg_dump` + `minio-data` tar, 7일 보관).
+
+7. **업데이트 배포**
+
+```bash
+cd /opt/findbid
+git pull origin main
+docker compose -f compose.yaml --profile full up --build -d
+docker compose -f compose.yaml --profile test run --rm test
+```
+
 ## 종료
 
 ```powershell

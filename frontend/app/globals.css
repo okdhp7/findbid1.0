@@ -1599,6 +1599,10 @@ html[data-findbid-theme="light"] .app-shell {
   width: 56px;
 }
 
+.app-shell .metric-icon > span {
+  transform: translateY(-4px);
+}
+
 .app-shell .metric-icon.mint { background: var(--green-soft); color: var(--green); }
 .app-shell .metric-icon.blue { background: rgba(79, 142, 247, 0.12); color: var(--accent-light); }
 .app-shell .metric-icon.gold { background: var(--amber-soft); color: var(--amber); }

@@ -20,7 +20,7 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - "${FINDBID_PORT:-3100}:3000"
+      - "127.0.0.1:${FINDBID_PORT:-3100}:3000"
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
@@ -51,7 +51,7 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-8100}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8100}:8000"
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-findbid}:${POSTGRES_PASSWORD:-findbid}@postgres:5432/${POSTGRES_DB:-findbid}
@@ -196,12 +196,12 @@ services:
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      OPENSEARCH_JAVA_OPTS: ${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
     volumes:
       - opensearch-data:/usr/share/opensearch/data
       - ./infrastructure/opensearch/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
     ports:
-      - "${OPENSEARCH_PORT:-9200}:9200"
+      - "127.0.0.1:${OPENSEARCH_PORT:-9200}:9200"
     networks:
       - data
 
@@ -217,8 +217,8 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     networks:
       - data
 

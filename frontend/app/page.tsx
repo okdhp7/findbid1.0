@@ -2750,28 +2750,28 @@ export default function Home() {
           {/* Metric Cards */}
           <div className="metrics">
             <article>
-              <span className="metric-icon mint">⌕</span>
+              <span className="metric-icon mint"><span>⌕</span></span>
               <div>
                 <small>전체 공고</small>
                 <strong>{databaseTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
             </article>
             <article>
-              <span className="metric-icon blue">✓</span>
+              <span className="metric-icon blue"><span>✓</span></span>
               <div>
                 <small>참가 가능</small>
                 <strong>{eligibleTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
             </article>
             <article>
-              <span className="metric-icon gold">✦</span>
+              <span className="metric-icon gold"><span>✦</span></span>
               <div>
                 <small>평균 적합도</small>
                 <strong>{averageScore.toLocaleString("ko-KR")}<em>점</em></strong>
               </div>
             </article>
             <article>
-              <span className="metric-icon rose">◷</span>
+              <span className="metric-icon rose"><span>◷</span></span>
               <div>
                 <small>7일 내 마감</small>
                 <strong>{closingSoonTotal.toLocaleString("ko-KR")}<em>건</em></strong>
