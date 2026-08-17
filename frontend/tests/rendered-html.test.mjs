@@ -532,12 +532,14 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
 });
 
 test("관리페이지에서 DB 사용자 검색 피드백 기록을 조회하고 삭제한다", async () => {
-  const [adminPage, activityPage, css, activityRoute, activityUserRoute] = await Promise.all([
+  const [adminPage, activityPage, css, activityRoute, activityUserRoute, activitySearchRoute, activityFeedbackRoute] = await Promise.all([
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/activity-logs/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/activity-logs/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/activity-users/[sessionHash]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/activity-searches/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/activity-feedback/route.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(adminPage, /href="\/admin\/activity-logs">DB 활동로그/);
@@ -584,13 +586,27 @@ test("관리페이지에서 DB 사용자 검색 피드백 기록을 조회하고
   assert.match(activityPage, /document\.body\.style\.overflow = "hidden"/);
   assert.doesNotMatch(activityPage, /<td><details><summary>상세/);
   assert.match(activityPage, /deleteActivityUser/);
+  assert.match(activityPage, /deleteSearchPage/);
+  assert.match(activityPage, /AI 검색이력 \$\{pages\.searches\}페이지의/);
+  assert.match(activityPage, /사용자·기업프로필과 추천 피드백은 삭제되지 않습니다/);
+  assert.match(activityPage, /JSON\.stringify\(\{ ids: searches\.map\(\(search\) => search\.id\) \}\)/);
+  assert.match(activityPage, /현재 페이지 삭제/);
+  assert.match(activityPage, /deleteFeedbackPage/);
+  assert.match(activityPage, /추천 피드백 \$\{pages\.feedback\}페이지의/);
+  assert.match(activityPage, /사용자·기업프로필과 AI 검색이력은 삭제되지 않습니다/);
+  assert.match(activityPage, /JSON\.stringify\(\{ ids: feedback\.map\(\(item\) => item\.id\) \}\)/);
   assert.match(activityRoute, /new URLSearchParams/);
   assert.match(activityRoute, /\/api\/v1\/admin\/activity-logs\?\$\{query\}/);
   assert.match(activityUserRoute, /method: "DELETE"/);
+  assert.match(activitySearchRoute, /export async function DELETE\(request: Request\)/);
+  assert.match(activitySearchRoute, /\/api\/v1\/admin\/activity-searches/);
+  assert.match(activityFeedbackRoute, /export async function DELETE\(request: Request\)/);
+  assert.match(activityFeedbackRoute, /\/api\/v1\/admin\/activity-feedback/);
   assert.match(css, /\.admin-tabs/);
   assert.match(css, /\.admin-activity-subtabs/);
   assert.match(css, /\.admin-activity-table/);
   assert.match(css, /\.admin-activity-pagination/);
+  assert.match(css, /\.admin-activity-list-actions/);
   assert.match(css, /\.admin-activity-modal-backdrop/);
   assert.match(css, /\.admin-activity-modal-content/);
   assert.match(css, /\.admin-activity-modal-identity/);
@@ -609,12 +625,14 @@ test("관리페이지에서 DB 사용자 검색 피드백 기록을 조회하고
 });
 
 test("관리페이지에서 나라장터 수요기관을 매일 동기화하고 조회한다", async () => {
-  const [adminPage, activityPage, agencyPage, listRoute, syncRoute, css] = await Promise.all([
+  const [adminPage, activityPage, agencyPage, listRoute, syncRoute, syncHistoryRoute, clientMetadata, css] = await Promise.all([
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/activity-logs/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/demand-agencies/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/demand-agencies/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/demand-agencies/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/demand-agencies/sync-history/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/client-metadata.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
@@ -636,6 +654,20 @@ test("관리페이지에서 나라장터 수요기관을 매일 동기화하고 
   assert.match(agencyPage, /기관종류/);
   assert.match(agencyPage, /기관세부유형/);
   assert.match(agencyPage, /동기화 실행 이력/);
+  assert.match(agencyPage, /<th>실행 IP<\/th>/);
+  assert.match(agencyPage, /displaySyncRequestIp\(run\.requestIp\)/);
+  assert.match(agencyPage, /return "127\.0\.0\.1 \(로컬\)"/);
+  assert.match(syncRoute, /clientMetadataHeaders\(request\)/);
+  assert.match(clientMetadata, /firstForwardedAddress\(forwardedFor\)/);
+  assert.match(clientMetadata, /isDockerBridgeGateway\(clientIp\)/);
+  assert.match(clientMetadata, /clientIp = "127\.0\.0\.1"/);
+  assert.match(agencyPage, /동기화 실행 이력을 모두 삭제하시겠습니까/);
+  assert.match(agencyPage, /수요기관 데이터는 삭제되지 않습니다/);
+  assert.match(agencyPage, /\/api\/admin\/demand-agencies\/sync-history/);
+  assert.match(agencyPage, /historyDeleting \|\| Boolean\(data\.sync\.running\) \|\| data\.sync\.history\.length === 0/);
+  assert.match(agencyPage, /historyDeleting \? "삭제 중\.\.\." : "전체 삭제"/);
+  assert.match(syncHistoryRoute, /export async function DELETE\(request: Request\)/);
+  assert.match(syncHistoryRoute, /\/api\/v1\/admin\/demand-agencies\/sync-history/);
   assert.match(agencyPage, /window\.setInterval\(\(\) => void loadAgencies\(\), 3000\)/);
   assert.match(agencyPage, /const PAGE_JUMP = 5/);
   assert.match(agencyPage, /Math\.max\(1, page - PAGE_JUMP\)/);

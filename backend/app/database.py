@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -68,6 +68,15 @@ def initialize_database(retries: int = 20, interval_seconds: float = 1.5) -> Non
     for attempt in range(1, retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
+            if "request_ip" not in {
+                column["name"]
+                for column in inspect(engine).get_columns("demand_agency_sync_runs")
+            }:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        "ALTER TABLE demand_agency_sync_runs "
+                        "ADD COLUMN request_ip VARCHAR(45) NOT NULL DEFAULT ''"
+                    ))
             return
         except OperationalError:
             if attempt == retries:

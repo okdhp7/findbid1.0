@@ -22,6 +22,7 @@ type AgencyItem = {
 type SyncRun = {
   id: number;
   trigger: string;
+  requestIp: string;
   status: string;
   startedAt: string;
   finishedAt: string | null;
@@ -70,6 +71,14 @@ function displayDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
 }
 
+function displaySyncRequestIp(value: string) {
+  if (!value) return "-";
+  if (value === "172.20.0.1" || value === "192.168.65.1") {
+    return "127.0.0.1 (로컬)";
+  }
+  return value;
+}
+
 function inquiryDate(value: string) {
   if (!/^\d{12}$/.test(value)) return value || "없음";
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)} ${value.slice(8, 10)}:${value.slice(10, 12)}`;
@@ -108,6 +117,7 @@ export default function AdminDemandAgenciesPage() {
   const [agencyStatus, setAgencyStatus] = useState("active");
   const [loading, setLoading] = useState(false);
   const [syncStarting, setSyncStarting] = useState(false);
+  const [historyDeleting, setHistoryDeleting] = useState(false);
   const [syncMessageRunId, setSyncMessageRunId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
 
@@ -185,6 +195,29 @@ export default function AdminDemandAgenciesPage() {
       setMessage(error instanceof Error ? error.message : "수요기관 정보 가져오기를 시작하지 못했습니다.");
     } finally {
       setSyncStarting(false);
+    }
+  };
+
+  const deleteSyncHistory = async () => {
+    if (!window.confirm("동기화 실행 이력을 모두 삭제하시겠습니까?\n수요기관 데이터는 삭제되지 않습니다.")) return;
+    setHistoryDeleting(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/demand-agencies/sync-history", { method: "DELETE" });
+      const responseData = await response.json() as {
+        message?: string;
+        detail?: string;
+        deletedCount?: number;
+      };
+      if (!response.ok) throw new Error(responseData.detail ?? "동기화 실행 이력 삭제 오류");
+      const deletedCount = responseData.deletedCount ?? 0;
+      setMessage(`${deletedCount.toLocaleString("ko-KR")}건의 동기화 실행 이력을 삭제했습니다.`);
+      setSyncMessageRunId(null);
+      await loadAgencies();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "동기화 실행 이력을 삭제하지 못했습니다.");
+    } finally {
+      setHistoryDeleting(false);
     }
   };
 
@@ -326,9 +359,18 @@ export default function AdminDemandAgenciesPage() {
         </section>
 
         <section className="admin-agency-history" aria-labelledby="agency-history-title">
-          <h2 id="agency-history-title">동기화 실행 이력</h2>
-          <div className="admin-agency-history-table-wrap"><table><thead><tr><th>실행일시</th><th>실행구분</th><th>상태</th><th>조회범위</th><th>수신</th><th>신규</th><th>변경</th><th>삭제</th><th>오류</th></tr></thead><tbody>
-            {data.sync.history.length === 0 ? <tr><td colSpan={9}>동기화 실행 이력이 없습니다.</td></tr> : data.sync.history.map((run) => <tr key={run.id}><td>{displayDate(run.startedAt)}</td><td>{triggerLabel(run.trigger)}</td><td><span className={`admin-sync-status ${run.status}`}>{statusLabel(run.status)}</span></td><td>{inquiryDate(run.inquiryStart)} ~ {inquiryDate(run.inquiryEnd)}</td><td>{run.receivedCount.toLocaleString("ko-KR")}</td><td>{run.createdCount.toLocaleString("ko-KR")}</td><td>{run.updatedCount.toLocaleString("ko-KR")}</td><td>{run.deletedCount.toLocaleString("ko-KR")}</td><td title={run.errorMessage}>{run.errorMessage || "-"}</td></tr>)}
+          <div className="admin-agency-history-head">
+            <h2 id="agency-history-title">동기화 실행 이력</h2>
+            <button
+              type="button"
+              onClick={() => void deleteSyncHistory()}
+              disabled={historyDeleting || Boolean(data.sync.running) || data.sync.history.length === 0}
+            >
+              {historyDeleting ? "삭제 중..." : "전체 삭제"}
+            </button>
+          </div>
+          <div className="admin-agency-history-table-wrap"><table><thead><tr><th>실행일시</th><th>실행구분</th><th>실행 IP</th><th>상태</th><th>조회범위</th><th>수신</th><th>신규</th><th>변경</th><th>삭제</th><th>오류</th></tr></thead><tbody>
+            {data.sync.history.length === 0 ? <tr><td colSpan={10}>동기화 실행 이력이 없습니다.</td></tr> : data.sync.history.map((run) => <tr key={run.id}><td>{displayDate(run.startedAt)}</td><td>{triggerLabel(run.trigger)}</td><td>{displaySyncRequestIp(run.requestIp)}</td><td><span className={`admin-sync-status ${run.status}`}>{statusLabel(run.status)}</span></td><td>{inquiryDate(run.inquiryStart)} ~ {inquiryDate(run.inquiryEnd)}</td><td>{run.receivedCount.toLocaleString("ko-KR")}</td><td>{run.createdCount.toLocaleString("ko-KR")}</td><td>{run.updatedCount.toLocaleString("ko-KR")}</td><td>{run.deletedCount.toLocaleString("ko-KR")}</td><td title={run.errorMessage}>{run.errorMessage || "-"}</td></tr>)}
           </tbody></table></div>
         </section>
       </section>

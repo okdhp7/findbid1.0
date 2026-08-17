@@ -57,8 +57,9 @@ def test_force_sync_bypasses_only_the_daily_completion_limit(monkeypatch) -> Non
     with pytest.raises(DemandAgencySyncAlreadyDone):
         manager.start("admin")
 
-    run = manager.start("admin_force", force=True)
+    run = manager.start("admin_force", force=True, request_ip="203.0.113.25")
     assert run["trigger"] == "admin_force"
+    assert run["requestIp"] == "203.0.113.25"
     assert run["status"] == "running"
     with pytest.raises(DemandAgencySyncRunning):
         manager.start("admin_force", force=True)
@@ -164,6 +165,7 @@ def test_admin_demand_agencies_are_filtered_and_paginated() -> None:
         ])
         session.add(DemandAgencySyncRun(
             trigger="admin",
+            request_ip="2001:db8::1",
             status="success",
             started_at=now,
             finished_at=now,
@@ -189,4 +191,25 @@ def test_admin_demand_agencies_are_filtered_and_paginated() -> None:
     assert result["items"][0]["name"] == "충남대학교 산학협력단"
     assert result["items"][0]["topLevelAgencyName"] == "충남대학교"
     assert result["sync"]["latestSuccess"]["status"] == "success"
+    assert result["sync"]["latestSuccess"]["requestIp"] == "2001:db8::1"
     assert result["filters"]["jurisdictionTypes"] == ["공공기관", "지방자치단체"]
+
+
+def test_sync_history_is_deleted_only_when_no_sync_is_running() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine, tables=[DemandAgencySyncRun.__table__])
+    with Session(engine) as session:
+        session.add_all([
+            DemandAgencySyncRun(trigger="admin", status="success"),
+            DemandAgencySyncRun(trigger="scheduled", status="running"),
+        ])
+        session.commit()
+        repository = DemandAgencyRepository(session)
+
+        assert repository.delete_sync_history() is None
+        running = session.query(DemandAgencySyncRun).filter_by(status="running").one()
+        running.status = "success"
+        session.commit()
+
+        assert repository.delete_sync_history() == 2
+        assert session.query(DemandAgencySyncRun).count() == 0

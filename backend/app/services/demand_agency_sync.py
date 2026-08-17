@@ -240,7 +240,13 @@ class DemandAgencySyncManager:
             run.finished_at = datetime.now(timezone.utc)
             run.error_message = "비정상 종료로 실행 상태가 정리되었습니다."
 
-    def start(self, trigger: str = "admin", *, force: bool = False) -> dict[str, Any]:
+    def start(
+        self,
+        trigger: str = "admin",
+        *,
+        force: bool = False,
+        request_ip: str = "",
+    ) -> dict[str, Any]:
         settings = get_settings()
         if not settings.demand_agency_sync_enabled:
             raise DemandAgencySyncError("수요기관 자동 동기화가 비활성화되어 있습니다.")
@@ -269,7 +275,11 @@ class DemandAgencySyncManager:
                 ):
                     session.commit()
                     raise DemandAgencySyncAlreadyDone("오늘 자동 동기화를 이미 시도했습니다.")
-                run = DemandAgencySyncRun(trigger=trigger, status="running")
+                run = DemandAgencySyncRun(
+                    trigger=trigger,
+                    request_ip=_clean(request_ip, 45),
+                    status="running",
+                )
                 session.add(run)
                 session.commit()
                 session.refresh(run)

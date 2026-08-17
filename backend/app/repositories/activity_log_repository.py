@@ -386,3 +386,41 @@ class ActivityLogRepository:
         )
         self.session.commit()
         return True
+
+    def delete_search_activities(self, search_log_ids: list[int]) -> int:
+        safe_ids = sorted({value for value in search_log_ids if value > 0})[:100]
+        if not safe_ids:
+            return 0
+        result = self.session.execute(
+            delete(SearchActivityLog).where(SearchActivityLog.id.in_(safe_ids))
+        )
+        deleted_count = int(result.rowcount or 0)
+        if deleted_count > 0:
+            self.session.add(
+                AdminActivityAuditLog(
+                    action="AI 검색이력 페이지 삭제",
+                    target=f"{deleted_count}건 · ID {','.join(map(str, safe_ids))}",
+                )
+            )
+        self.session.commit()
+        return deleted_count
+
+    def delete_feedback_activities(self, feedback_log_ids: list[int]) -> int:
+        safe_ids = sorted({value for value in feedback_log_ids if value > 0})[:100]
+        if not safe_ids:
+            return 0
+        result = self.session.execute(
+            delete(RecommendationFeedbackLog).where(
+                RecommendationFeedbackLog.id.in_(safe_ids)
+            )
+        )
+        deleted_count = int(result.rowcount or 0)
+        if deleted_count > 0:
+            self.session.add(
+                AdminActivityAuditLog(
+                    action="추천 피드백 페이지 삭제",
+                    target=f"{deleted_count}건 · ID {','.join(map(str, safe_ids))}",
+                )
+            )
+        self.session.commit()
+        return deleted_count

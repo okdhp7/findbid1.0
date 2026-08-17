@@ -24,6 +24,30 @@ class FeedbackSettingsUpdate(BaseModel):
     feedback_enabled: bool
 
 
+class ActivitySearchDelete(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=100)
+
+    @field_validator("ids")
+    @classmethod
+    def validate_ids(cls, value: list[int]) -> list[int]:
+        unique_ids = list(dict.fromkeys(value))
+        if any(item <= 0 for item in unique_ids):
+            raise ValueError("검색이력 ID가 올바르지 않습니다.")
+        return unique_ids
+
+
+class ActivityFeedbackDelete(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=100)
+
+    @field_validator("ids")
+    @classmethod
+    def validate_ids(cls, value: list[int]) -> list[int]:
+        unique_ids = list(dict.fromkeys(value))
+        if any(item <= 0 for item in unique_ids):
+            raise ValueError("피드백 이력 ID가 올바르지 않습니다.")
+        return unique_ids
+
+
 class NotificationWrite(BaseModel):
     publisher: str = Field(min_length=1, max_length=100)
     content: str = Field(min_length=1, max_length=4000)
@@ -101,6 +125,34 @@ def delete_activity_user(
         raise HTTPException(status_code=404, detail="사용자 활동기록을 찾을 수 없습니다.")
 
 
+@router.delete("/admin/activity-searches")
+def delete_activity_searches(
+    request: ActivitySearchDelete,
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    deleted_count = ActivityLogRepository(session).delete_search_activities(request.ids)
+    return {
+        "message": "선택한 AI 검색이력을 삭제했습니다.",
+        "deletedCount": deleted_count,
+    }
+
+
+@router.delete("/admin/activity-feedback")
+def delete_activity_feedback(
+    request: ActivityFeedbackDelete,
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    deleted_count = ActivityLogRepository(session).delete_feedback_activities(request.ids)
+    return {
+        "message": "선택한 추천 피드백을 삭제했습니다.",
+        "deletedCount": deleted_count,
+    }
+
+
 @router.get("/admin/demand-agencies")
 def list_demand_agencies(
     page: int = Query(default=1, ge=1),
@@ -129,12 +181,14 @@ def list_demand_agencies(
 def start_demand_agency_sync(
     force: bool = Query(default=False),
     x_internal_key: str = Header(default=""),
+    x_client_ip: str = Header(default="", alias="X-Client-IP"),
 ) -> dict[str, object]:
     require_internal_key(x_internal_key)
     try:
         run = demand_agency_sync_manager().start(
             "admin_force" if force else "admin",
             force=force,
+            request_ip=x_client_ip,
         )
     except DemandAgencySyncAlreadyDone as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
@@ -148,6 +202,24 @@ def start_demand_agency_sync(
         else "수요기관 정보 가져오기를 시작했습니다."
     )
     return {"message": message, "run": run}
+
+
+@router.delete("/admin/demand-agencies/sync-history")
+def delete_demand_agency_sync_history(
+    x_internal_key: str = Header(default=""),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    require_internal_key(x_internal_key)
+    deleted_count = DemandAgencyRepository(session).delete_sync_history()
+    if deleted_count is None:
+        raise HTTPException(
+            status_code=409,
+            detail="동기화 실행 중에는 실행 이력을 삭제할 수 없습니다.",
+        )
+    return {
+        "message": "동기화 실행 이력을 모두 삭제했습니다.",
+        "deletedCount": deleted_count,
+    }
 
 
 @router.get("/admin/notifications")

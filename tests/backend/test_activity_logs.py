@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.models.activity_log import (
+    AdminActivityAuditLog,
     RecommendationFeedbackLog,
     SearchActivityLog,
     UserActivitySession,
@@ -75,4 +76,69 @@ def test_admin_activity_logs_are_paginated_by_type() -> None:
         assert searches["searches"][0]["searchId"] == "search-31"
         assert len(feedback["feedback"]) == 2
         assert feedback["feedback"][0]["bidId"] == "bid-1"
+
+
+def test_search_activity_logs_are_deleted_by_displayed_page_ids() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(
+        engine,
+        tables=[SearchActivityLog.__table__, AdminActivityAuditLog.__table__],
+    )
+    with Session(engine) as session:
+        for index in range(4):
+            session.add(SearchActivityLog(
+                search_id=f"page-delete-{index}",
+                session_hash=f"{index:064d}",
+                trigger="ai_button",
+                search_fingerprint=f"fingerprint-{index}",
+                request_data={},
+                result_summary={},
+            ))
+        session.commit()
+        logs = list(session.query(SearchActivityLog).order_by(SearchActivityLog.id))
+
+        deleted_count = ActivityLogRepository(session).delete_search_activities(
+            [logs[1].id, logs[2].id]
+        )
+
+        assert deleted_count == 2
+        assert [item.search_id for item in session.query(SearchActivityLog).order_by(
+            SearchActivityLog.id
+        )] == ["page-delete-0", "page-delete-3"]
+        audit = session.query(AdminActivityAuditLog).one()
+        assert audit.action == "AI 검색이력 페이지 삭제"
+
+
+def test_feedback_activity_logs_are_deleted_by_displayed_page_ids() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(
+        engine,
+        tables=[RecommendationFeedbackLog.__table__, AdminActivityAuditLog.__table__],
+    )
+    with Session(engine) as session:
+        for index in range(4):
+            session.add(RecommendationFeedbackLog(
+                search_id=f"feedback-delete-{index}",
+                session_hash=f"{index:064d}",
+                bid_id=f"bid-{index}",
+                feedback_type="positive",
+                reasons=[],
+                condition_ids=[],
+                source="detail",
+            ))
+        session.commit()
+        logs = list(session.query(RecommendationFeedbackLog).order_by(
+            RecommendationFeedbackLog.id
+        ))
+
+        deleted_count = ActivityLogRepository(session).delete_feedback_activities(
+            [logs[0].id, logs[3].id]
+        )
+
+        assert deleted_count == 2
+        assert [item.bid_id for item in session.query(RecommendationFeedbackLog).order_by(
+            RecommendationFeedbackLog.id
+        )] == ["bid-1", "bid-2"]
+        audit = session.query(AdminActivityAuditLog).one()
+        assert audit.action == "추천 피드백 페이지 삭제"
 

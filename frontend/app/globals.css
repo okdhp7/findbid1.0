@@ -4534,8 +4534,8 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
 }
 
 .app-shell .drawer-layer {
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(0.5px);
+  -webkit-backdrop-filter: blur(0.5px);
   background: rgba(2, 6, 23, 0.32);
   display: flex;
   justify-content: flex-end;
@@ -6614,6 +6614,40 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
 
 .admin-activity-list {
   min-width: 0;
+}
+
+.admin-activity-list-actions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.admin-activity-list-actions span {
+  color: #75829a;
+  font-size: 12px;
+}
+
+.admin-activity-list-actions button {
+  background: #ffffff;
+  border: 1px solid #e5a9b3;
+  border-radius: 8px;
+  color: #b52d45;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.admin-activity-list-actions button:hover:not(:disabled) {
+  background: #fff1f3;
+}
+
+.admin-activity-list-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .admin-activity-pagination {
@@ -8849,8 +8883,32 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-icon {
   color: #176be8;
 }
 
-.admin-agency-history h2 {
-  padding: 20px 24px 14px;
+.admin-agency-history-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+
+.admin-agency-history-head button {
+  background: #ffffff;
+  border: 1px solid #e5a9b3;
+  border-radius: 8px;
+  color: #b52d45;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.admin-agency-history-head button:hover:not(:disabled) {
+  background: #fff1f3;
+}
+
+.admin-agency-history-head button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .admin-agency-history td:last-child {

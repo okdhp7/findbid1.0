@@ -157,6 +157,8 @@ export default function AdminActivityLogsPage() {
   const [pagination, setPagination] = useState<Record<ActivityView, ActivityPagination>>(INITIAL_PAGINATION);
   const [activeView, setActiveView] = useState<ActivityView>("users");
   const [loading, setLoading] = useState(false);
+  const [searchPageDeleting, setSearchPageDeleting] = useState(false);
+  const [feedbackPageDeleting, setFeedbackPageDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [detailModal, setDetailModal] = useState<ActivityDetailModal | null>(null);
 
@@ -277,6 +279,63 @@ export default function AdminActivityLogsPage() {
     }
   };
 
+  const deleteSearchPage = async () => {
+    if (searches.length === 0) return;
+    if (!window.confirm(
+      `AI 검색이력 ${pages.searches}페이지의 ${searches.length.toLocaleString("ko-KR")}건을 삭제하시겠습니까?\n사용자·기업프로필과 추천 피드백은 삭제되지 않습니다.`,
+    )) return;
+    setSearchPageDeleting(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/activity-searches", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: searches.map((search) => search.id) }),
+      });
+      const responseData = await response.json() as { detail?: string; deletedCount?: number };
+      if (!response.ok) throw new Error(responseData.detail ?? "AI 검색이력 삭제 오류");
+      const deletedCount = responseData.deletedCount ?? 0;
+      const remainingTotal = Math.max(0, pagination.searches.total - deletedCount);
+      const lastPage = Math.max(1, Math.ceil(remainingTotal / ACTIVITY_PAGE_SIZE));
+      const targetPage = Math.min(pages.searches, lastPage);
+      setDetailModal(null);
+      await loadActivityLogs("searches", targetPage);
+      setMessage(`${deletedCount.toLocaleString("ko-KR")}건의 AI 검색이력을 삭제했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "AI 검색이력을 삭제하지 못했습니다.");
+    } finally {
+      setSearchPageDeleting(false);
+    }
+  };
+
+  const deleteFeedbackPage = async () => {
+    if (feedback.length === 0) return;
+    if (!window.confirm(
+      `추천 피드백 ${pages.feedback}페이지의 ${feedback.length.toLocaleString("ko-KR")}건을 삭제하시겠습니까?\n사용자·기업프로필과 AI 검색이력은 삭제되지 않습니다.`,
+    )) return;
+    setFeedbackPageDeleting(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/activity-feedback", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids: feedback.map((item) => item.id) }),
+      });
+      const responseData = await response.json() as { detail?: string; deletedCount?: number };
+      if (!response.ok) throw new Error(responseData.detail ?? "추천 피드백 삭제 오류");
+      const deletedCount = responseData.deletedCount ?? 0;
+      const remainingTotal = Math.max(0, pagination.feedback.total - deletedCount);
+      const lastPage = Math.max(1, Math.ceil(remainingTotal / ACTIVITY_PAGE_SIZE));
+      const targetPage = Math.min(pages.feedback, lastPage);
+      await loadActivityLogs("feedback", targetPage);
+      setMessage(`${deletedCount.toLocaleString("ko-KR")}건의 추천 피드백을 삭제했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "추천 피드백을 삭제하지 못했습니다.");
+    } finally {
+      setFeedbackPageDeleting(false);
+    }
+  };
+
   if (authenticated === null) {
     return (
       <main className="admin-shell">
@@ -392,6 +451,16 @@ export default function AdminActivityLogsPage() {
 
         {activeView === "searches" && (
           <div className="admin-activity-list">
+            <div className="admin-activity-list-actions">
+              <span>현재 {pagination.searches.page.toLocaleString("ko-KR")}페이지 · {searches.length.toLocaleString("ko-KR")}건</span>
+              <button
+                type="button"
+                disabled={loading || searchPageDeleting || searches.length === 0}
+                onClick={() => void deleteSearchPage()}
+              >
+                {searchPageDeleting ? "삭제 중..." : "현재 페이지 삭제"}
+              </button>
+            </div>
             <div className="admin-activity-table-wrap"><table className="admin-activity-table">
             <thead><tr><th>순번</th><th>검색일시</th><th>사용자</th><th>저장 구분</th><th>검색조건</th><th>검색결과</th></tr></thead>
             <tbody>{searches.length === 0 ? (
@@ -432,6 +501,16 @@ export default function AdminActivityLogsPage() {
 
         {activeView === "feedback" && (
           <div className="admin-activity-list">
+            <div className="admin-activity-list-actions">
+              <span>현재 {pagination.feedback.page.toLocaleString("ko-KR")}페이지 · {feedback.length.toLocaleString("ko-KR")}건</span>
+              <button
+                type="button"
+                disabled={loading || feedbackPageDeleting || feedback.length === 0}
+                onClick={() => void deleteFeedbackPage()}
+              >
+                {feedbackPageDeleting ? "삭제 중..." : "현재 페이지 삭제"}
+              </button>
+            </div>
             <div className="admin-activity-table-wrap"><table className="admin-activity-table">
             <thead><tr><th>순번</th><th>피드백일시</th><th>사용자</th><th>구분</th><th>공고</th><th>사유</th></tr></thead>
             <tbody>{feedback.length === 0 ? (

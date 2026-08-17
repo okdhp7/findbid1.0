@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.demand_agency import DemandAgency, DemandAgencySyncRun
@@ -23,6 +23,7 @@ def _run_item(run: DemandAgencySyncRun | None) -> dict[str, Any] | None:
     return {
         "id": run.id,
         "trigger": run.trigger,
+        "requestIp": run.request_ip,
         "status": run.status,
         "startedAt": _iso(run.started_at),
         "finishedAt": _iso(run.finished_at),
@@ -40,6 +41,20 @@ def _run_item(run: DemandAgencySyncRun | None) -> dict[str, Any] | None:
 class DemandAgencyRepository:
     def __init__(self, session: Session):
         self.session = session
+
+    def delete_sync_history(self) -> int | None:
+        running = self.session.scalar(
+            select(DemandAgencySyncRun.id)
+            .where(DemandAgencySyncRun.status == "running")
+            .limit(1)
+        )
+        if running is not None:
+            return None
+        result = self.session.execute(
+            delete(DemandAgencySyncRun).where(DemandAgencySyncRun.status != "running")
+        )
+        self.session.commit()
+        return int(result.rowcount or 0)
 
     def admin_list(
         self,
