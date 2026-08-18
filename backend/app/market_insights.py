@@ -13,6 +13,7 @@ KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
 KEYWORD_PATTERN = re.compile(r"[a-z][a-z0-9+#.-]{1,}|[가-힣]{2,}")
 KOREAN_COMPOUND_PATTERN = re.compile(r"[가-힣0-9]{4,}")
 MIN_KEYWORD_MODEL_QUALITY = 0.12
+HOT_KEYWORD_LIMIT = 15
 IGNORED_KEYWORDS = {
     "공고", "입찰", "입찰공고", "사업", "용역", "물품", "공사", "계약",
     "업체", "제출", "안내", "관련", "과업", "전자입찰", "견적", "견적제출",
@@ -414,7 +415,7 @@ def build_market_insights(
         keyword_groups[dimension][group] = sorted(
             results,
             key=lambda item: (-item["heat"], -item["count"], item["label"]),
-        )[:10]
+        )[:HOT_KEYWORD_LIMIT]
         keyword_group_counts[dimension][group] = total
 
     budget_labels = {key: label for key, label, _, _ in BUDGET_BANDS}

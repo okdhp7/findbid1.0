@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.market_insights import build_market_insights, months_ago
+from app.market_insights import HOT_KEYWORD_LIMIT, build_market_insights, months_ago
 
 
 KOREA_TIMEZONE = ZoneInfo("Asia/Seoul")
@@ -139,6 +139,25 @@ def test_months_ago_handles_month_end() -> None:
     value = datetime(2026, 8, 31, 12, 0, tzinfo=KOREA_TIMEZONE)
 
     assert months_ago(value, 6).date().isoformat() == "2026-02-28"
+
+
+def test_hot_keyword_trend_returns_up_to_fifteen_items() -> None:
+    period_end = datetime(2026, 8, 3, 12, 0, tzinfo=KOREA_TIMEZONE)
+    period_start = months_ago(period_end, 6)
+    rows = [
+        _row(
+            f"{keyword_index}-{repeat_index}",
+            f"topic{keyword_index:02d}",
+            period_end - timedelta(days=repeat_index + 1),
+        )
+        for keyword_index in range(20)
+        for repeat_index in range(2)
+    ]
+
+    result = build_market_insights(rows, period_start, period_end)
+
+    assert HOT_KEYWORD_LIMIT == 15
+    assert len(result["keywordGroups"]["all"]["all"]) == HOT_KEYWORD_LIMIT
 
 
 def test_reference_documents_are_excluded_from_market_demands() -> None:

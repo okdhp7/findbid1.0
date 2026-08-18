@@ -32,8 +32,7 @@ test("FindBid 검색 화면을 서버에서 렌더링한다", async () => {
   assert.match(html, /<title>FindBid \| AI 입찰공고 탐색<\/title>/i);
   assert.match(html, /AI 시맨틱 검색/);
   assert.match(html, /상세 조건/);
-  assert.match(html, /실제 입찰공고를 불러오는 중입니다/);
-  assert.match(html, /role="status"/);
+  assert.doesNotMatch(html, /class="bid-search-loading-layer"/);
   assert.match(html, /placeholder="AI, 웹서비스, 플랫폼" value=""/);
   assert.match(html, /placeholder="장비 납품, 인력파견" value=""/);
   assert.doesNotMatch(html, /1,284/);
@@ -65,6 +64,8 @@ test("페이지 최상단과 공고 목록 하단 이동 기능을 제공한다"
   assert.match(css, /\.app-shell \.filters\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
   assert.match(css, /\.app-shell \.bid-card\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
   assert.match(css, /\.app-shell \.metrics article\s*\{[\s\S]*?border-radius:\s*var\(--radius-md\)/);
+  assert.match(css, /\.app-shell \.bid-search-loading-layer\s*\{[\s\S]*?backdrop-filter:\s*blur\(4px\);[\s\S]*?position:\s*fixed;[\s\S]*?z-index:\s*130;/);
+  assert.match(css, /\.app-shell \.bid-search-loading-card/);
 });
 
 test("입찰탐색과 인사이트 페이지가 선택한 화면 테마를 공유한다", async () => {
@@ -99,9 +100,14 @@ test("상세조건 변경 시 시맨틱 검색어를 함께 적용해 자동 검
   assert.match(page, /scheduleDetailSearch\(/);
   assert.match(page, /const detailSnapshot = \{ \.\.\.snapshot \}/);
   assert.match(page, /prepareSemanticAnalysisState\(detailSnapshot\.semanticQuery\);[\s\S]*?runSearch\(detailSnapshot, 1\)/);
-  assert.match(page, /const \[isSearching, setIsSearching\] = useState\(false\)/);
+  assert.match(page, /const \[isSearching, setIsSearching\] = useState\(true\)/);
   assert.match(page, /className=\{`result-list \$\{isSearching \? "is-loading" : ""\}`\}/);
   assert.match(page, /aria-busy=\{isSearching\}/);
+  assert.match(page, /className="bid-search-loading-layer"/);
+  assert.match(page, /const SEARCH_LOADING_DELAY_MS = 500/);
+  assert.match(page, /window\.setTimeout\([\s\S]*?setShowSearchLoadingLayer\(true\)[\s\S]*?SEARCH_LOADING_DELAY_MS/);
+  assert.match(page, /window\.clearTimeout\(timer\)/);
+  assert.match(page, /showSearchLoadingLayer &&/);
   const prepareAnalysisBody = page.match(
     /const prepareSemanticAnalysisState = \(nextSemanticQuery: string\) => \{([\s\S]*?)\n  \};/,
   )?.[1] ?? "";
@@ -342,9 +348,14 @@ test("추천 입찰공고 주의사항을 팝오버로 표시하고 확인 버�
   assert.match(page, /aria-controls="recommendation-notice-popover"/);
   assert.match(page, /className="recommendation-notice-icon" aria-hidden="true">⚠<\/span>/);
   assert.match(page, /role="dialog"/);
+  assert.match(page, /입찰 참여 전 필수 확인/);
+  assert.match(page, /className="recommendation-notice-list"/);
+  assert.match(page, /className="recommendation-notice-confirm"/);
   assert.match(page, /모든 입찰공고의 정보는 나라장터 원문의 내용과 다를 수 있으므로 반드시 공고 원문 및 첨부 파일을 확인하시기 바랍니다/);
   assert.match(page, /onClick=\{\(\) => setRecommendationNoticeOpen\(false\)\}/);
   assert.match(css, /\.app-shell \.recommendation-notice-popover/);
+  assert.match(css, /\.app-shell \.recommendation-notice-heading/);
+  assert.match(css, /\.app-shell \.recommendation-notice-list li\.is-important/);
   assert.match(css, /html\[data-findbid-theme="dark"\] \.app-shell \.recommendation-notice-trigger/);
 });
 
@@ -997,8 +1008,17 @@ test("인사이트 메뉴는 별도 페이지에서 시장과 기업 관점의 �
   assert.match(marketRoute, /insights\/market\?months=6/);
   assert.match(insights, /className="active" href="\/insights" aria-current="page"/);
   assert.match(insights, /const INSIGHT_PAGE_SIZE = 200/);
+  assert.match(insights, /const INSIGHTS_LOADING_DELAY_MS = 100/);
   assert.match(insights, /const RESTRICTION_TARGET_SIZE = 1_000/);
   assert.match(insights, /6개월 데이터 분석 중/);
+  assert.match(insights, /className="insights-loading-layer"/);
+  assert.match(insights, /className="insights-loading-card"/);
+  assert.match(insights, /입찰 인사이트를 분석하고 있습니다/);
+  assert.match(insights, /window\.setTimeout\([\s\S]*?setShowInsightsLoadingLayer\(true\)[\s\S]*?INSIGHTS_LOADING_DELAY_MS/);
+  assert.match(insights, /window\.clearTimeout\(timer\)/);
+  assert.match(insights, /showInsightsLoadingLayer &&/);
+  assert.match(css, /\.app-shell \.insights-loading-layer\s*\{[\s\S]*?backdrop-filter:\s*blur\(4px\);[\s\S]*?position:\s*fixed;[\s\S]*?z-index:\s*130;/);
+  assert.match(css, /\.app-shell \.insights-loading-card/);
   assert.equal((insights.match(/sortMode: "latest"/g) ?? []).length, 1);
   assert.match(css, /\.app-shell \.insight-dashboard/);
   assert.match(css, /\.app-shell \.insights-main/);

@@ -1,7 +1,7 @@
 {
   "name": "findbid",
-  "version": "1.0.0",
-  "releaseDate": "2026-08-15 20:30",
+  "version": "1.0.1",
+  "releaseDate": "2026-08-18 16:00",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

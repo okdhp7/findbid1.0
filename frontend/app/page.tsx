@@ -156,6 +156,7 @@ const INSIGHTS_OPPORTUNITY_SEARCH: SearchSnapshot = {
 
 const PAGE_SIZE = 20;
 const PAGE_JUMP = 5;
+const SEARCH_LOADING_DELAY_MS = 500;
 const AGENCY_SUGGESTION_PAGE_SIZE = 20;
 const AGENCY_SUGGESTION_MAX = 100;
 
@@ -774,6 +775,7 @@ export default function Home() {
   const [sort, setSort] = useState("score");
   const [searched, setSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(true);
+  const [showSearchLoadingLayer, setShowSearchLoadingLayer] = useState(false);
   const [resultBids, setResultBids] = useState<Bid[]>([]);
   const [databaseTotal, setDatabaseTotal] = useState(0);
   const [searchTotal, setSearchTotal] = useState(0);
@@ -816,6 +818,18 @@ export default function Home() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [saveSearchOpen, setSaveSearchOpen] = useState(false);
   const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
+
+  useEffect(() => {
+    if (!isSearching) {
+      setShowSearchLoadingLayer(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(
+      () => setShowSearchLoadingLayer(true),
+      SEARCH_LOADING_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [isSearching]);
   const [savedSearchName, setSavedSearchName] = useState("");
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(() => {
     if (typeof window === "undefined") return [];
@@ -2034,6 +2048,26 @@ export default function Home() {
         </div>
       </header>
 
+      {showSearchLoadingLayer && (
+        <div className="bid-search-loading-layer" role="status" aria-live="polite">
+          <div className="bid-search-loading-card">
+            <span className="search-progress-spinner" aria-hidden="true" />
+            <div>
+              <strong>
+                {searched
+                  ? "입찰공고를 분석하고 있습니다"
+                  : "입찰공고를 불러오는 중입니다"}
+              </strong>
+              <span>
+                {searched
+                  ? "검색조건을 해석하고 적합한 공고를 찾는 중입니다."
+                  : "최신 공고와 기업 맞춤 추천 결과를 준비하고 있습니다."}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Hero ── */}
       <section className="hero" id="top">
         <div className="hero-glow hero-glow-one" />
@@ -2048,7 +2082,7 @@ export default function Home() {
             <span>AI가 먼저 찾아드립니다.</span>
           </h1>
           <p>
-            인공지능이 검색 의도를 분석해 최적의 입찰공고를 탐색하여 분석정보와 함께 제공합니다.
+            FindBid는 회원가입 없이, AI가 입력문장과 조건을 해석해 최적의 입찰공고를 찾아드립니다.
           </p>
 
           {/* Semantic Search Card */}
@@ -2816,16 +2850,33 @@ export default function Home() {
                     role="dialog"
                     aria-label="입찰공고 주의사항"
                   >
-                    <p>
-                      제공되는 정보는 G2B API에 의하여 수집된 입찰공고를 기준으로 검색하며, 모든 나라장터 입찰공고를 포함하는것을 보장하지는 않습니다.
-                      <br></br>모든 입찰공고의 정보는 나라장터 원문의 내용과 다를 수 있으므로 반드시 공고 원문 및 첨부 파일을 확인하시기 바랍니다.
-                      <br></br>또한, 추천 입찰공고는 현재 주어진 정보에 근거하여 AI가 분석한 결과를 기반으로 제공되며, 실제 입찰 결과와 다를 수 있습니다.
-                    </p>
+                    <div className="recommendation-notice-heading">
+                      <span className="recommendation-notice-heading-icon" aria-hidden="true">!</span>
+                      <div>
+                        <span>입찰 참여 전 필수 확인</span>
+                        <strong>꼭 확인해 주세요</strong>
+                      </div>
+                    </div>
+                    <ul className="recommendation-notice-list">
+                      <li>
+                        <strong>정보 수집 범위</strong>
+                        <p>제공되는 정보는 G2B API로 수집한 입찰공고를 기준으로 하며, 모든 나라장터 공고를 포함하는 것을 보장하지 않습니다.</p>
+                      </li>
+                      <li className="is-important">
+                        <strong>공고 원문 확인 필수</strong>
+                        <p>모든 입찰공고의 정보는 나라장터 원문의 내용과 다를 수 있으므로 반드시 공고 원문 및 첨부 파일을 확인하시기 바랍니다.</p>
+                      </li>
+                      <li>
+                        <strong>AI 분석은 참고 정보</strong>
+                        <p>추천 입찰공고는 현재 주어진 정보를 AI가 분석한 결과이며, 실제 입찰 결과와 다를 수 있습니다.</p>
+                      </li>
+                    </ul>
                     <button
+                      className="recommendation-notice-confirm"
                       type="button"
                       onClick={() => setRecommendationNoticeOpen(false)}
                     >
-                      확인
+                      내용을 확인했습니다
                     </button>
                   </div>
                 )}
@@ -2843,22 +2894,6 @@ export default function Home() {
               </select>
             </div>
           </div>
-
-          {isSearching && (
-            <div
-              className="search-progress-status"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="search-progress-copy">
-                <span className="search-progress-spinner" aria-hidden="true" />
-                <div>
-                  <strong>입찰공고를 분석하고 있습니다</strong>
-                  <span>검색조건을 해석하고 적합한 공고를 찾는 중입니다.</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Bid List */}
           <div

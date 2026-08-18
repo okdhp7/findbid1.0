@@ -13,6 +13,7 @@ import { useSharedTheme } from "../_components/use-shared-theme";
 
 const COMPANY_PROFILE_KEY = "findbid.company-profile.v1";
 const INSIGHT_PAGE_SIZE = 200;
+const INSIGHTS_LOADING_DELAY_MS = 100;
 const RESTRICTION_TARGET_SIZE = 1_000;
 const INSIGHT_IGNORED_TERMS = new Set(["공고", "사업", "용역", "물품", "공사", "기타"]);
 const HOT_KEYWORD_DIMENSIONS = [
@@ -176,6 +177,7 @@ export default function InsightsPage() {
   const [searchData, setSearchData] = useState<InsightSearchResponse>(EMPTY_RESPONSE);
   const [marketData, setMarketData] = useState<MarketInsightResponse>(EMPTY_MARKET_RESPONSE);
   const [loading, setLoading] = useState(true);
+  const [showInsightsLoadingLayer, setShowInsightsLoadingLayer] = useState(false);
   const [error, setError] = useState("");
   const [priorityOpportunities, setPriorityOpportunities] = useState<Bid[]>([]);
   const [restrictionBids, setRestrictionBids] = useState<Bid[]>([]);
@@ -329,6 +331,18 @@ export default function InsightsPage() {
   }, []);
 
   useEffect(() => {
+    if (!loading) {
+      setShowInsightsLoadingLayer(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(
+      () => setShowInsightsLoadingLayer(true),
+      INSIGHTS_LOADING_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [loading]);
+
+  useEffect(() => {
     const restoredProfile = restoreCompanyProfile();
     setCompanyProfile(restoredProfile);
     void loadInsights(restoredProfile);
@@ -475,6 +489,18 @@ export default function InsightsPage() {
         </div>
       </header>
 
+      {showInsightsLoadingLayer && (
+        <div className="insights-loading-layer" role="status" aria-live="polite">
+          <div className="insights-loading-card">
+            <span className="search-progress-spinner" aria-hidden="true" />
+            <div>
+              <strong>입찰 인사이트를 분석하고 있습니다</strong>
+              <span>최근 6개월 공고와 기업 맞춤 참여 기회를 분석하는 중입니다.</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="insights-hero">
         <div>
           <span className="section-kicker">BID INTELLIGENCE</span>
@@ -494,17 +520,6 @@ export default function InsightsPage() {
       </section>
 
       <section className="insights-main" aria-live="polite" aria-busy={loading}>
-        {loading && (
-          <div className="search-progress-status" role="status">
-            <div className="search-progress-copy">
-              <span className="search-progress-spinner" aria-hidden="true" />
-              <div>
-                <strong>입찰 인사이트를 분석하고 있습니다</strong>
-                <span>최근 6개월 공고와 기업 맞춤 참여 기회를 분석하는 중입니다.</span>
-              </div>
-            </div>
-          </div>
-        )}
         {error && <div className="insights-error" role="alert">{error}</div>}
         <div className={`insight-dashboard standalone ${loading ? "is-loading" : ""}`}>
           <div className="insight-dashboard-head">
