@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -129,6 +130,46 @@ def test_changed_fetch_merges_registration_and_change_date_results(monkeypatch) 
     assert api_total == 3
     assert len(items) == 2
     assert next(item for item in items if item["dminsttCd"] == "A001")["dminsttNm"] == "변경 후 기관"
+
+
+def test_request_backs_off_longer_on_429_then_succeeds(monkeypatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr("app.services.demand_agency_sync.time.sleep", lambda s: sleeps.append(s))
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict | None = None):
+            self.status_code = status_code
+            self.headers: dict[str, str] = {}
+            self._payload = payload
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    "429", request=httpx.Request("GET", "https://example.test"), response=self
+                )
+
+        def json(self) -> dict:
+            return self._payload or {}
+
+    responses = [
+        FakeResponse(429),
+        FakeResponse(
+            200,
+            {"response": {"header": {"resultCode": "00"}, "body": {"totalCount": 0, "items": []}}},
+        ),
+    ]
+
+    class FakeClient:
+        def get(self, *_args, **_kwargs):
+            return responses.pop(0)
+
+    api_client = G2BDemandAgencyClient()
+    api_client.service_key = "테스트 키"
+    result = api_client._request(FakeClient(), {"pageNo": 1})
+
+    assert result == {"totalCount": 0, "items": []}
+    # pacing sleep before each attempt + the longer 429 backoff before the retry
+    assert 10.0 in sleeps
 
 
 def test_admin_demand_agencies_are_filtered_and_paginated() -> None:

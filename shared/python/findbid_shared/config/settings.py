@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     demand_agency_sync_timeout_seconds: float = 30.0
     demand_agency_sync_window_days: int = 31
     demand_agency_sync_overlap_days: int = 7
-    demand_agency_sync_initial_date: str = "190001010000"
+    # ponytail: 나라장터(KONEPS)는 2002년 개통이라 2000년 이전 데이터는 없음.
+    # 1900년으로 잡으면 초기 백필 요청 수가 5배 이상 불어나 레이트리밋에 바로 걸림.
+    demand_agency_sync_initial_date: str = "200001010000"
     demand_agency_sync_check_seconds: int = 3600
 
     model_config = SettingsConfigDict(

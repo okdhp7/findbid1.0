@@ -25,6 +25,10 @@ G2B_DEMAND_AGENCY_URL = (
     "https://apis.data.go.kr/1230000/ao/UsrInfoService02/getDminsttInfo02"
 )
 SYNC_LOCK_KEY = 2026081101
+# ponytail: fixed pacing to stay under G2B's per-second rate limit; make
+# configurable via settings if 429s persist even with this.
+REQUEST_INTERVAL_SECONDS = 0.3
+RATE_LIMIT_BACKOFF_SECONDS = 10.0
 
 
 class DemandAgencySyncError(RuntimeError):
@@ -96,6 +100,7 @@ class G2BDemandAgencyClient:
     def _request(self, client: httpx.Client, params: dict[str, object]) -> dict[str, Any]:
         last_error: Exception | None = None
         for attempt in range(1, 4):
+            time.sleep(REQUEST_INTERVAL_SECONDS)
             try:
                 response = client.get(G2B_DEMAND_AGENCY_URL, params=params)
                 response.raise_for_status()
@@ -120,6 +125,15 @@ class G2BDemandAgencyClient:
                     "totalCount": int(body.get("totalCount") or 0),
                     "items": self._items(body),
                 }
+            except httpx.HTTPStatusError as error:
+                last_error = error
+                if attempt < 3:
+                    if error.response.status_code == 429:
+                        retry_after = error.response.headers.get("Retry-After")
+                        wait = float(retry_after) if retry_after and retry_after.isdigit() else RATE_LIMIT_BACKOFF_SECONDS * attempt
+                        time.sleep(wait)
+                    else:
+                        time.sleep(attempt * 1.5)
             except (httpx.HTTPError, ValueError, DemandAgencySyncError) as error:
                 last_error = error
                 if attempt < 3:
