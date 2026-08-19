@@ -17,7 +17,6 @@ CMD ["/app/frontend/node_modules/.bin/next", "dev", "--webpack", "--hostname", "
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=dependencies /app/frontend/node_modules /app/frontend/node_modules
-COPY .openai /app/.openai
 COPY frontend /app/frontend
 WORKDIR /app/frontend
 RUN npm run build
