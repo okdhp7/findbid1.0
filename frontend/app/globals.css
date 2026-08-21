@@ -9165,7 +9165,7 @@ html[data-findbid-theme="dark"] .app-shell .recommendation-notice-list li.is-imp
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
   .app-shell .search-progress-spinner {
-    animation: none !important;
+    animation: search-progress-spin 0.8s linear infinite !important;
   }
 
   *, *::before, *::after {
