@@ -156,6 +156,7 @@ const INSIGHTS_OPPORTUNITY_SEARCH: SearchSnapshot = {
 
 const PAGE_SIZE = 20;
 const PAGE_JUMP = 5;
+const SAVED_SEARCHES_LIMIT = 20;
 const SEARCH_LOADING_DELAY_MS = 500;
 const AGENCY_SUGGESTION_PAGE_SIZE = 20;
 const AGENCY_SUGGESTION_MAX = 100;
@@ -174,6 +175,25 @@ const INCLUDE_KEYWORD_HISTORY_KEY = "findbid.include-keyword-history.v1";
 const EXCLUDE_KEYWORD_HISTORY_KEY = "findbid.exclude-keyword-history.v1";
 const DEMAND_AGENCY_HISTORY_KEY = "findbid.demand-agency-history.v1";
 const KEYWORD_HISTORY_LIMIT = 5;
+const USER_DATA_FORMAT = "findbid-user-data";
+const USER_DATA_VERSION = 1;
+const USER_DATA_FILE_SIZE_LIMIT = 1024 * 1024;
+
+type UserDataBundle = {
+  format: typeof USER_DATA_FORMAT;
+  version: typeof USER_DATA_VERSION;
+  exportedAt: string;
+  data: {
+    companyProfile: CompanyProfile;
+    savedSearches: SavedSearch[];
+    recentSearches: {
+      semantic: string[];
+      includeKeywords: string[];
+      excludeKeywords: string[];
+      demandAgencies: string[];
+    };
+  };
+};
 
 function splitDemandAgencies(value: string): string[] {
   return Array.from(new Set(
@@ -414,6 +434,168 @@ function profileCompletion(profile: Omit<CompanyProfile, "completion">): number 
 
 function normalizeRegionFilter(region: string) {
   return region === "전국" ? "전체 지역" : region;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function importedString(
+  value: unknown,
+  fieldName: string,
+  maxLength: number,
+): string {
+  if (typeof value !== "string") {
+    throw new Error(`${fieldName} 항목의 형식이 올바르지 않습니다.`);
+  }
+  return value.trim().slice(0, maxLength);
+}
+
+function normalizeImportedHistory(
+  value: unknown,
+  fieldName: string,
+  limit: number,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} 최근 기록의 형식이 올바르지 않습니다.`);
+  }
+  const unique = new Map<string, string>();
+  value.forEach((item) => {
+    const normalized = importedString(item, fieldName, 300);
+    if (normalized) unique.set(normalized.toLocaleLowerCase("ko-KR"), normalized);
+  });
+  return Array.from(unique.values()).slice(0, limit);
+}
+
+function normalizeImportedSearchSnapshot(value: unknown): SearchSnapshot {
+  if (!isRecord(value)) {
+    throw new Error("저장 검색조건의 형식이 올바르지 않습니다.");
+  }
+  const category = importedString(value.category, "업무 구분", 20);
+  if (!categories.includes(category as (typeof categories)[number])) {
+    throw new Error("저장 검색조건의 업무 구분을 확인할 수 없습니다.");
+  }
+  if (typeof value.maxBudget !== "number" || !Number.isFinite(value.maxBudget)) {
+    throw new Error("저장 검색조건의 사업금액이 올바르지 않습니다.");
+  }
+  if (typeof value.onlyEligible !== "boolean" || typeof value.closingSoon !== "boolean") {
+    throw new Error("저장 검색조건의 선택 항목이 올바르지 않습니다.");
+  }
+
+  let closingWithinDays: number | null | undefined;
+  if (value.closingWithinDays === undefined) {
+    closingWithinDays = undefined;
+  } else if (value.closingWithinDays === null) {
+    closingWithinDays = null;
+  } else if (
+    typeof value.closingWithinDays === "number"
+    && Number.isInteger(value.closingWithinDays)
+    && value.closingWithinDays >= 1
+    && value.closingWithinDays <= 365
+  ) {
+    closingWithinDays = value.closingWithinDays;
+  } else {
+    throw new Error("저장 검색조건의 마감 기간이 올바르지 않습니다.");
+  }
+
+  if (value.sortMode !== undefined && value.sortMode !== null && value.sortMode !== "opportunity") {
+    throw new Error("저장 검색조건의 정렬 방식이 올바르지 않습니다.");
+  }
+
+  return {
+    category: category as (typeof categories)[number],
+    region: normalizeRegionFilter(importedString(value.region, "지역", 120)) || DEFAULT_SEARCH.region,
+    maxBudget: Math.max(0, Math.min(Math.round(value.maxBudget), 100_000_000_000_000)),
+    includeKeyword: importedString(value.includeKeyword, "포함 키워드", 500),
+    excludeKeyword: importedString(value.excludeKeyword, "제외 키워드", 500),
+    demandAgencyInput: importedString(value.demandAgencyInput, "수요기관", 500),
+    semanticQuery: importedString(value.semanticQuery, "AI 검색어", 1000),
+    onlyEligible: value.onlyEligible,
+    closingSoon: value.closingSoon,
+    closingWithinDays,
+    sortMode: value.sortMode as SearchSnapshot["sortMode"],
+  };
+}
+
+function normalizeImportedSavedSearches(value: unknown): SavedSearch[] {
+  if (!Array.isArray(value)) {
+    throw new Error("저장 검색조건 목록의 형식이 올바르지 않습니다.");
+  }
+  return value.slice(0, SAVED_SEARCHES_LIMIT).map((item) => {
+    if (!isRecord(item)) {
+      throw new Error("저장 검색조건 항목의 형식이 올바르지 않습니다.");
+    }
+    const id = importedString(item.id, "검색조건 식별자", 100);
+    const name = importedString(item.name, "검색조건 이름", 120);
+    const createdAt = importedString(item.createdAt, "검색조건 저장일", 40);
+    if (!id || !name || !createdAt || Number.isNaN(Date.parse(createdAt))) {
+      throw new Error("저장 검색조건의 필수 정보를 확인할 수 없습니다.");
+    }
+    return {
+      id,
+      name,
+      createdAt: new Date(createdAt).toISOString(),
+      filters: normalizeImportedSearchSnapshot(item.filters),
+    };
+  });
+}
+
+function parseUserDataBundle(value: unknown): UserDataBundle["data"] {
+  if (!isRecord(value) || value.format !== USER_DATA_FORMAT) {
+    throw new Error("FindBid 내 정보 파일이 아닙니다.");
+  }
+  if (value.version !== USER_DATA_VERSION) {
+    throw new Error("지원하지 않는 내 정보 파일 버전입니다.");
+  }
+  if (!isRecord(value.data) || !isRecord(value.data.recentSearches)) {
+    throw new Error("내 정보 파일의 데이터 형식이 올바르지 않습니다.");
+  }
+  if (!isRecord(value.data.companyProfile)) {
+    throw new Error("기업 프로필의 형식이 올바르지 않습니다.");
+  }
+
+  const normalizedProfile = normalizeCompanyProfile(value.data.companyProfile);
+  const companyProfile: CompanyProfile = {
+    ...normalizedProfile,
+    completion: profileCompletion(normalizedProfile),
+  };
+
+  return {
+    companyProfile,
+    savedSearches: normalizeImportedSavedSearches(value.data.savedSearches),
+    recentSearches: {
+      semantic: normalizeImportedHistory(
+        value.data.recentSearches.semantic,
+        "AI 검색어",
+        SEMANTIC_HISTORY_LIMIT,
+      ),
+      includeKeywords: normalizeImportedHistory(
+        value.data.recentSearches.includeKeywords,
+        "포함 키워드",
+        KEYWORD_HISTORY_LIMIT,
+      ),
+      excludeKeywords: normalizeImportedHistory(
+        value.data.recentSearches.excludeKeywords,
+        "제외 키워드",
+        KEYWORD_HISTORY_LIMIT,
+      ),
+      demandAgencies: normalizeImportedHistory(
+        value.data.recentSearches.demandAgencies,
+        "수요기관",
+        KEYWORD_HISTORY_LIMIT,
+      ),
+    },
+  };
+}
+
+function mergeImportedHistory(imported: string[], current: string[], limit: number): string[] {
+  const unique = new Map<string, string>();
+  [...imported, ...current].forEach((item) => {
+    const normalized = item.trim();
+    const key = normalized.toLocaleLowerCase("ko-KR");
+    if (normalized && !unique.has(key)) unique.set(key, normalized);
+  });
+  return Array.from(unique.values()).slice(0, limit);
 }
 
 function companyProfileInitials(name: string): string {
@@ -731,6 +913,7 @@ function Toggle({
 export default function Home() {
   const footerBottomRef = useRef<HTMLDivElement>(null);
   const semanticHistoryRef = useRef<HTMLDivElement>(null);
+  const userDataFileInputRef = useRef<HTMLInputElement>(null);
   const autoSearchTimerRef = useRef<number | null>(null);
   const searchAbortControllerRef = useRef<AbortController | null>(null);
   const searchRequestIdRef = useRef(0);
@@ -815,6 +998,7 @@ export default function Home() {
   const [profileDraft, setProfileDraft] = useState<CompanyProfileDraft>(() =>
     profileToDraft(companyProfile),
   );
+  const [importingUserData, setImportingUserData] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [saveSearchOpen, setSaveSearchOpen] = useState(false);
   const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
@@ -1712,6 +1896,143 @@ export default function Home() {
     setProfileDraft(profileToDraft(DEFAULT_COMPANY_PROFILE));
   };
 
+  const exportUserData = () => {
+    const bundle: UserDataBundle = {
+      format: USER_DATA_FORMAT,
+      version: USER_DATA_VERSION,
+      exportedAt: new Date().toISOString(),
+      data: {
+        companyProfile,
+        savedSearches,
+        recentSearches: {
+          semantic: semanticHistory,
+          includeKeywords: includeKeywordHistory,
+          excludeKeywords: excludeKeywordHistory,
+          demandAgencies: demandAgencyHistory,
+        },
+      },
+    };
+
+    try {
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `findbid-내정보-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+      showSaveNotice("내 정보 파일을 저장했습니다.");
+    } catch {
+      showSaveNotice("내 정보 파일을 만들지 못했습니다.");
+    }
+  };
+
+  const importUserData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    setImportingUserData(true);
+
+    try {
+      if (file.size > USER_DATA_FILE_SIZE_LIMIT) {
+        throw new Error("내 정보 파일은 1MB 이하만 가져올 수 있습니다.");
+      }
+      const imported = parseUserDataBundle(JSON.parse(await file.text()) as unknown);
+      const confirmed = window.confirm(
+        `기업 프로필을 교체하고 저장 검색조건 ${imported.savedSearches.length}개와 최근 검색 기록을 기존 정보에 병합할까요?`,
+      );
+      if (!confirmed) return;
+
+      const savedSearchMap = new Map<string, SavedSearch>();
+      imported.savedSearches.forEach((item) => savedSearchMap.set(item.id, item));
+      savedSearches.forEach((item) => {
+        if (!savedSearchMap.has(item.id)) savedSearchMap.set(item.id, item);
+      });
+      const nextSavedSearches = Array.from(savedSearchMap.values()).slice(
+        0,
+        SAVED_SEARCHES_LIMIT,
+      );
+      const nextSemanticHistory = mergeImportedHistory(
+        imported.recentSearches.semantic,
+        semanticHistory,
+        SEMANTIC_HISTORY_LIMIT,
+      );
+      const nextIncludeKeywordHistory = mergeImportedHistory(
+        imported.recentSearches.includeKeywords,
+        includeKeywordHistory,
+        KEYWORD_HISTORY_LIMIT,
+      );
+      const nextExcludeKeywordHistory = mergeImportedHistory(
+        imported.recentSearches.excludeKeywords,
+        excludeKeywordHistory,
+        KEYWORD_HISTORY_LIMIT,
+      );
+      const nextDemandAgencyHistory = mergeImportedHistory(
+        imported.recentSearches.demandAgencies,
+        demandAgencyHistory,
+        KEYWORD_HISTORY_LIMIT,
+      );
+
+      const storageEntries = [
+        [COMPANY_PROFILE_KEY, JSON.stringify(imported.companyProfile)],
+        [SAVED_SEARCHES_KEY, JSON.stringify(nextSavedSearches)],
+        [SEMANTIC_HISTORY_KEY, JSON.stringify(nextSemanticHistory)],
+        [INCLUDE_KEYWORD_HISTORY_KEY, JSON.stringify(nextIncludeKeywordHistory)],
+        [EXCLUDE_KEYWORD_HISTORY_KEY, JSON.stringify(nextExcludeKeywordHistory)],
+        [DEMAND_AGENCY_HISTORY_KEY, JSON.stringify(nextDemandAgencyHistory)],
+      ] as const;
+      const storageBackup = storageEntries.map(([key]) => [
+        key,
+        window.localStorage.getItem(key),
+      ] as const);
+
+      try {
+        storageEntries.forEach(([key, value]) => window.localStorage.setItem(key, value));
+      } catch {
+        storageBackup.forEach(([key, value]) => {
+          try {
+            if (value === null) window.localStorage.removeItem(key);
+            else window.localStorage.setItem(key, value);
+          } catch {
+            // 브라우저 저장소 복구가 불가능한 경우 기존 화면 상태는 유지합니다.
+          }
+        });
+        throw new Error("브라우저 저장소에 내 정보를 저장하지 못했습니다.");
+      }
+
+      companyProfileRef.current = imported.companyProfile;
+      setCompanyProfile(imported.companyProfile);
+      setProfileDraft(profileToDraft(imported.companyProfile));
+      setSavedSearches(nextSavedSearches);
+      setSemanticHistory(nextSemanticHistory);
+      setIncludeKeywordHistory(nextIncludeKeywordHistory);
+      setExcludeKeywordHistory(nextExcludeKeywordHistory);
+      setDemandAgencyHistory(nextDemandAgencyHistory);
+
+      void fetch("/api/company/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify(imported.companyProfile),
+      }).catch(() => undefined);
+
+      showSaveNotice("내 정보를 가져와 현재 브라우저에 적용했습니다.");
+      runSearchNow(currentSearchSnapshot());
+    } catch (error) {
+      showSaveNotice(
+        error instanceof Error
+          ? error.message
+          : "내 정보 파일을 읽지 못했습니다.",
+      );
+    } finally {
+      setImportingUserData(false);
+      input.value = "";
+    }
+  };
+
   const persistSavedSearches = (next: SavedSearch[]) => {
     setSavedSearches(next);
     window.localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(next));
@@ -1739,7 +2060,7 @@ export default function Home() {
         },
       },
       ...savedSearches,
-    ].slice(0, 20);
+    ].slice(0, SAVED_SEARCHES_LIMIT);
     persistSavedSearches(next);
     setSaveSearchOpen(false);
     showSaveNotice("검색조건을 저장했습니다.");
@@ -2321,6 +2642,7 @@ export default function Home() {
               조건 초기화
             </button>
             <button
+              className="filter-close-button"
               type="button"
               onClick={() => setFiltersOpen(false)}
               aria-label="필터 닫기"
@@ -2784,28 +3106,52 @@ export default function Home() {
           {/* Metric Cards */}
           <div className="metrics">
             <article>
-              <span className="metric-icon mint"><span>⌕</span></span>
+              <span className="metric-icon mint" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M8 4.5h8.25A1.75 1.75 0 0 1 18 6.25V16" />
+                  <rect x="4.5" y="7.5" width="14.5" height="12" rx="2" />
+                  <path d="M8 11.5h7.5M8 15.5h5" />
+                </svg>
+              </span>
               <div>
                 <small>전체 공고</small>
                 <strong>{databaseTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
             </article>
             <article>
-              <span className="metric-icon blue"><span>✓</span></span>
+              <span className="metric-icon blue" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3.5 19 6v5.25c0 4.5-2.85 7.55-7 9.25-4.15-1.7-7-4.75-7-9.25V6l7-2.5Z" />
+                  <path d="m8.75 12 2.1 2.1 4.4-4.45" />
+                </svg>
+              </span>
               <div>
                 <small>참가 가능</small>
                 <strong>{eligibleTotal.toLocaleString("ko-KR")}<em>건</em></strong>
               </div>
             </article>
             <article>
-              <span className="metric-icon gold"><span>✦</span></span>
+              <span className="metric-icon gold" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="7.5" />
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 2.5v2M21.5 12h-2M12 21.5v-2M2.5 12h2" />
+                </svg>
+              </span>
               <div>
                 <small>평균 적합도</small>
                 <strong>{averageScore.toLocaleString("ko-KR")}<em>점</em></strong>
               </div>
             </article>
             <article>
-              <span className="metric-icon rose"><span>◷</span></span>
+              <span className="metric-icon rose" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="3.75" y="4.75" width="16.5" height="15.5" rx="2.25" />
+                  <path d="M7.75 3v3.5M16.25 3v3.5M3.75 9.25h16.5" />
+                  <circle cx="15.25" cy="14.75" r="2.75" />
+                  <path d="M15.25 13.35v1.55l1.1.65" />
+                </svg>
+              </span>
               <div>
                 <small>7일 내 마감</small>
                 <strong>{closingSoonTotal.toLocaleString("ko-KR")}<em>건</em></strong>
@@ -2823,7 +3169,7 @@ export default function Home() {
                 aria-controls="mobile-filters"
                 aria-expanded={filtersOpen}
               >
-                ☷ 상세 조건
+                ☷ 검색 상세 조건
               </button>
               <span className="section-kicker">RECOMMENDED BIDS</span>
               <h2>
@@ -2907,7 +3253,27 @@ export default function Home() {
                 <p>포함 키워드를 줄이거나 사업 금액 범위를 넓혀보세요.</p>
                 <button
                   type="button"
-                  onClick={() => { setIncludeKeyword(""); setMaxBudget(0); }}
+                  onClick={() => {
+                    const relaxedSnapshot = {
+                      ...currentSearchSnapshot(),
+                      region: "전체 지역",
+                      maxBudget: 0,
+                      includeKeyword: "",
+                      excludeKeyword: "",
+                      demandAgencyInput: "",
+                    };
+                    setRegion("전체 지역");
+                    setMaxBudget(0);
+                    setIncludeKeyword("");
+                    setExcludeKeyword("");
+                    setDemandAgencyInput("");
+                    setKeywordHistoryOpen(null);
+                    setAgencySuggestions([]);
+                    setAgencySuggestionsHasMore(false);
+                    setAgencySuggestionsOpen(false);
+                    setAgencySuggestionLimit(AGENCY_SUGGESTION_PAGE_SIZE);
+                    runSearchNow(relaxedSnapshot);
+                  }}
                 >
                   조건 완화하기
                 </button>
@@ -4033,6 +4399,37 @@ export default function Home() {
                 여러 항목은 쉼표로 구분하며, 저장된 정보는 이 브라우저에 보관되고
                 적합도와 참가 가능 여부 계산에 사용됩니다.
               </p>
+              <section className="profile-data-transfer" aria-labelledby="profile-data-transfer-title">
+                <div>
+                  <strong id="profile-data-transfer-title">내 정보 이전</strong>
+                  <span>
+                    프로필, 저장 검색조건과 최근 검색 기록을 다른 컴퓨터로 옮길 수 있습니다.
+                  </span>
+                </div>
+                <div className="profile-data-transfer-actions">
+                  <button type="button" onClick={exportUserData}>
+                    내 정보 내보내기
+                  </button>
+                  <button
+                    type="button"
+                    disabled={importingUserData}
+                    onClick={() => userDataFileInputRef.current?.click()}
+                  >
+                    {importingUserData ? "가져오는 중…" : "내 정보 들여오기"}
+                  </button>
+                  <input
+                    ref={userDataFileInputRef}
+                    className="profile-data-file-input"
+                    type="file"
+                    accept=".json,application/json"
+                    aria-label="FindBid 내 정보 파일 선택"
+                    onChange={importUserData}
+                  />
+                </div>
+                <small>
+                  내보낸 파일에는 기업 정보와 검색 기록이 포함되므로 안전한 곳에 보관하세요.
+                </small>
+              </section>
               <div className="profile-form-actions">
                 <button
                   className="secondary-action"

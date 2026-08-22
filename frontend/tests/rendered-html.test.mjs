@@ -61,6 +61,7 @@ test("페이지 최상단과 공고 목록 하단 이동 기능을 제공한다"
   assert.match(css, /\.input-with-icon:focus-within\s*\{[\s\S]*?box-shadow:\s*none/);
   assert.match(css, /\.input-with-icon input:focus-visible\s*\{[\s\S]*?outline:\s*none/);
   assert.match(css, /\.app-shell \.semantic-card\s*\{[\s\S]*?border-radius:\s*var\(--radius-xl\)/);
+  assert.match(css, /\.app-shell \.semantic-card\s*\{[\s\S]*?border:\s*1px solid var\(--border-strong\)/);
   assert.match(css, /\.app-shell \.filters\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
   assert.match(css, /\.app-shell \.bid-card\s*\{[\s\S]*?border-radius:\s*var\(--radius-lg\)/);
   assert.match(css, /\.app-shell \.metrics article\s*\{[\s\S]*?border-radius:\s*var\(--radius-md\)/);
@@ -230,6 +231,13 @@ test("AI 시맨틱 검색 입력창에서 Enter 키로 검색한다", async () =
   assert.match(page, /className="search-button-label"/);
   const searchButtonStyle = css.match(/\.app-shell \.search-button\s*\{([^}]*)\}/)?.[1] ?? "";
   assert.match(searchButtonStyle, /font-size:\s*15px/);
+  assert.match(css, /--button-blue:\s*#2f75e8/);
+  assert.match(css, /--button-blue-deep:\s*#2f75e8/);
+  assert.match(css, /--accent:\s*#2f75e8/);
+  assert.match(css, /--accent-light:\s*#2f75e8/);
+  assert.match(css, /--accent-deep:\s*#2f75e8/);
+  assert.match(searchButtonStyle, /var\(--button-blue\)/);
+  assert.match(css, /\.app-shell \.apply-button,[\s\S]*?var\(--button-blue\)/);
   const searchIconStyle = css.match(/\.app-shell \.search-button-icon svg\s*\{([^}]*)\}/)?.[1] ?? "";
   assert.match(searchIconStyle, /height:\s*32px/);
   assert.match(searchIconStyle, /width:\s*32px/);
@@ -542,6 +550,40 @@ test("기업 프로필을 브라우저에 저장하고 검색 요청에 반영�
   assert.match(css, /\.app-shell \.profile-form-actions/);
 });
 
+test("프로필과 검색 정보를 파일로 내보내고 다른 브라우저에서 가져온다", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const USER_DATA_FORMAT = "findbid-user-data"/);
+  assert.match(page, /const USER_DATA_VERSION = 1/);
+  assert.match(page, /const USER_DATA_FILE_SIZE_LIMIT = 1024 \* 1024/);
+  assert.match(page, /function parseUserDataBundle\(value: unknown\)/);
+  assert.match(page, /function normalizeImportedSavedSearches\(value: unknown\)/);
+  assert.match(page, /function mergeImportedHistory\(imported: string\[\], current: string\[\], limit: number\)/);
+  assert.match(page, /const exportUserData = \(\) =>/);
+  assert.match(page, /const importUserData = async \(event: React\.ChangeEvent<HTMLInputElement>\) =>/);
+  assert.match(page, /companyProfile,[\s\S]*?savedSearches,[\s\S]*?recentSearches:/);
+  assert.match(page, /new Blob\(\[JSON\.stringify\(bundle, null, 2\)\]/);
+  assert.match(page, /findbid-내정보-/);
+  assert.match(page, /storageBackup/);
+  assert.match(page, /window\.localStorage\.setItem\(key, value\)/);
+  assert.match(page, /companyProfileRef\.current = imported\.companyProfile/);
+  assert.match(page, /body: JSON\.stringify\(imported\.companyProfile\)/);
+  assert.match(page, /onClick=\{exportUserData\}[\s\S]*?내 정보 내보내기/);
+  assert.match(page, /"내 정보 들여오기"/);
+  assert.match(page, /accept="\.json,application\/json"/);
+  assert.match(page, /기업 정보와 검색 기록이 포함되므로 안전한 곳에 보관하세요/);
+  assert.match(
+    page,
+    /id="profile-excluded-areas"[\s\S]*?className="profile-form-help"[\s\S]*?className="profile-data-transfer"/,
+  );
+  assert.match(css, /\.app-shell \.profile-data-transfer\s*\{/);
+  assert.match(css, /\.app-shell \.profile-data-transfer-actions/);
+  assert.match(css, /\.app-shell \.profile-data-file-input\s*\{[\s\S]*?display:\s*none/);
+});
+
 test("관리페이지에서 DB 사용자 검색 피드백 기록을 조회하고 삭제한다", async () => {
   const [adminPage, activityPage, css, activityRoute, activityUserRoute, activitySearchRoute, activityFeedbackRoute] = await Promise.all([
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
@@ -695,7 +737,7 @@ test("관리페이지에서 나라장터 수요기관을 매일 동기화하고 
   assert.match(css, /\.admin-agency-table-wrap/);
   assert.match(css, /\.admin-sync-status\.running/);
   assert.equal((agencyPage.match(/className="admin-agency-import-button"/g) ?? []).length, 1);
-  assert.match(css, /\.admin-agency-import-button\s*\{[\s\S]*?background:\s*#2869e6;[\s\S]*?border-radius:\s*10px;[\s\S]*?min-height:\s*42px/);
+  assert.match(css, /\.admin-agency-import-button\s*\{[\s\S]*?background:\s*#2f75e8;[\s\S]*?border-radius:\s*10px;[\s\S]*?min-height:\s*42px/);
   assert.doesNotMatch(css, /\.admin-agency-force-sync-button/);
   assert.match(css, /\.admin-agency-list-card > \.admin-activity-pagination\s*\{[\s\S]*?margin-bottom:\s*24px/);
 });

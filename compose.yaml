@@ -20,7 +20,7 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${FINDBID_PORT:-3100}:3000"
+      - "${FINDBID_PORT:-3100}:3000"
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-this-in-production}
